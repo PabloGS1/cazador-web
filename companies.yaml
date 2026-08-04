@@ -1,0 +1,80 @@
+# RED DE EMPRESAS DEL CAZADOR
+# Se comprueban todas en cada run; las que devuelvan 0 ofertas relevantes
+# se saltan solas. Añade/quita slugs libremente.
+#
+# - greenhouse: boards públicos (sin token), boletín en boards-api.greenhouse.io
+# - ashby:      startup board API en api.ashbyhq.com (muchas AI startups)
+#
+# Formato:  slug: Nombre mostrado
+
+greenhouse:
+  # IA / Data / Cloud / SaaS
+  databricks: Databricks
+  mongodb: MongoDB
+  datadog: Datadog
+  elastic: Elastic
+  okta: Okta
+  twilio: Twilio
+  gitlab: GitLab
+  dataiku: Dataiku
+  celonis: Celonis
+  fivetran: Fivetran
+  neo4j: Neo4j
+  # Nube e infraestructura
+  cloudflare: Cloudflare
+  coreweave: CoreWeave
+  fastly: Fastly
+  netskope: Netskope
+  zscaler: Zscaler
+  purestorage: Pure Storage
+  jfrog: JFrog
+  newrelic: New Relic
+  sumologic: Sumo Logic
+  # Producto / SaaS
+  figma: Figma
+  asana: Asana
+  airtable: Airtable
+  mixpanel: Mixpanel
+  amplitude: Amplitude
+  intercom: Intercom
+  typeform: Typeform
+  catawiki: Catawiki
+  dropbox: Dropbox
+  stripe: Stripe
+  # Datos / educación / otros
+  datacamp: DataCamp
+  coursera: Coursera
+  squarespace: Squarespace
+  cultureamp: Culture Amp
+  duolingo: Duolingo
+  # Industria / venta B2B
+  samsara: Samsara
+  reddit: Reddit
+  robinhood: Robinhood
+
+ashby:
+  # IA generativa y LLMs
+  cohere: Cohere
+  elevenlabs: ElevenLabs
+  cursor: Cursor
+  perplexity: Perplexity AI
+  langchain: LangChain
+  runway: Runway
+  harvey: Harvey
+  writer: Writer
+  cognition: Cognition
+  sierra: Sierra
+  lovable: Lovable
+  decagon: Decagon
+  character: Character.AI
+  replit: Replit
+  linear: Linear
+  # Datos / infra IA
+  vanta: Vanta
+  synthesia: Synthesia
+  deepl: DeepL
+  runpod: RunPod
+  fireworks: Fireworks AI
+  modal: Modal
+  weaviate: Weaviate
+  astronomer: Astronomer

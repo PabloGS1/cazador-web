@@ -1,0 +1,55 @@
+name: El Cazador
+
+on:
+  schedule:
+    - cron: "25 6 * * *"        # 06:25 UTC ≈ 08:25 en NL/CEST
+  workflow_dispatch:            # botón "Run workflow" en GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencias
+        run: pip install -r requirements.txt
+
+      - name: Scrape
+        env:
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+        run: python scraper.py --delay 0.4
+
+      - name: Match
+        run: python matcher.py --min 40
+
+      - name: Notificar por email
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+        run: python notify.py
+
+      - name: Commit de datos
+        run: |
+          git config user.name "el-cazador[bot]"
+          git config user.email "actions@github.com"
+          git add web/data/jobs.json
+          if ! git diff --cached --quiet; then
+            git commit -m "hunt: actualiza ofertas $(date -u +%F)"
+            git push
+          else
+            echo "sin cambios en jobs.json"
+          fi

@@ -1,0 +1,112 @@
+# PERFIL DE MATCH — derivado del CV de Pablo García-Salguero
+# Usado por matcher.py para puntuar cada oferta (0-100).
+# Familias de rol objetivo: IA/Data sales, Sales Engineer, Product Engineer, BDM.
+
+target_roles:
+  # Familia -> palabras que disparan un match fuerte en el título
+  "sales_engineering":
+    label: "Sales / Solutions Engineer"
+    weight: 45
+    keywords: ["sales engineer", "solutions engineer", "solution engineer", "presales",
+               "pre-sales", "pre sales", "technical sales", "solutions consultant",
+               "value engineer", "solutions architect", "technical account", "field engineer"]
+  "ai_data_sales":
+    label: "IA / Data Sales"
+    weight: 45
+    keywords: ["ai sales", "data sales", "business development", "bdm", "b2b sales",
+               "account executive", "account manager", "key account", "hunter",
+               "growth", "sales manager", "commercial", "sales executive", "seller"]
+  "product_engineer":
+    label: "Product Engineer / Product"
+    weight: 40
+    keywords: ["product engineer", "product owner", "product manager", "technical product",
+               "product specialist", "solutions architect"]
+  "bdm":
+    label: "Business Development Manager"
+    weight: 45
+    keywords: ["business development manager", "business development", "bdm",
+               "partnerships manager", "alliances", "channel manager", "partner manager"]
+
+domain_keywords:
+  # Dominio que multiplica el match: IA, Big Data, Cloud, IoT, DC, hardware IA
+  weight: 25
+  keywords:
+    - ["artificial intelligence", "inteligencia artificial", "genai", "generative ai", "llm", "machine learning", "deep learning", "ai ", " ai", "rag"]
+    - ["big data", "data engineer", "data scientist", "data analyst", "data platform", "databricks", "snowflake", "spark", "hadoop", "etl", "data warehouse", "data lake"]
+    - ["data center", "datacenter", "data centre", "dc ", "colocation", "hyperscale", "gpu", "hpc", "compute"]
+    - ["cloud", "aws", "azure", "gcp", "kubernetes", "saas", "paas", "iaas"]
+    - ["iot", "smart city", "smart cities", "connectivity", "telecom"]
+    - ["openai", "anthropic", "gemini", "gpt", "copilot", "agent"]
+
+skills_from_cv:
+  # Competencias del CV que suman al match si aparecen en la oferta
+  weight: 15
+  keywords: ["salesforce", "power bi", "sql", "rfp", "rfi", "proof of concept", "poc",
+             "presales", "pre-sales", "pipeline", "kpi", "stakeholder", "consultative",
+             "negotiation", "contract", "public sector", "government", "smart",
+             "cloud", "saas", "sap", "n8n", "business case", "go-to-market", "gtm"]
+
+location_prefs:
+  # Prioridades de país de la estrategia (80/15/5)
+  weight: 20
+  scoring:
+    netherlands: 30
+    amsterdam: 30
+    nederland: 30
+    utrecht: 20
+    rotterdam: 15
+    eindhoven: 15
+    hague: 15
+    switzerland: 25
+    zurich: 25
+    zürich: 25
+    geneva: 20
+    lausanne: 20
+    basel: 15
+    singapore: 15
+    "remote - emea": 20
+    emea: 10
+    norway: 12
+    oslo: 12
+    austria: 10
+    vienna: 10
+    wien: 10
+    malaysia: 8
+    mexico: 5
+    thailand: 5
+
+seniority:
+  # Ajuste por seniority
+  weight: 10
+  bonus: ["senior", "lead", "manager", "principal", "head", "director", "staff"]
+  penalty: ["intern", "internship", "graduate", "working student", "junior", "trainee", "practice"]
+
+salary_floor:
+  # Filtro soft: el matcher no descarta, solo informa en el summary
+  eur_min: 70000
+  note: "sueldo mínimo objetivo 70-80k EUR"
+
+query_keywords:
+  # Palabras que se pasan a los portales nacionales (queries de búsqueda)
+  - "solutions engineer"
+  - "sales engineer"
+  - "presales"
+  - "pre-sales"
+  - "business development manager"
+  - "business development"
+  - "product engineer"
+  - "product manager"
+  - "AI sales"
+  - "data sales"
+  - "data engineer"
+  - "data scientist"
+  - "artificial intelligence"
+  - "machine learning"
+  - "account executive"
+  - "account manager"
+  - "key account"
+  - "cloud sales"
+  - "SaaS"
+  - "data center"
+  - "GPU"
+  - "HPC"

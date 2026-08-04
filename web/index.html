@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El Cazador · Job Radar IA/Data Sales</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2128;
+    --line: #2d333b;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --lime: #7ee787;
+    --amber: #d29922;
+    --orange: #f0883e;
+    --red: #f85149;
+    --chip: #21262d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header {
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #12161c, var(--bg));
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .3px; }
+  header h1 .dot { color: var(--red); }
+  header .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+  .filters {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 10px 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  .filters input, .filters select {
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; outline: none;
+  }
+  .filters input:focus, .filters select:focus { border-color: var(--accent); }
+  .filters input[type=text] { width: 240px; }
+  .filters label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .filters .count { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 16px 20px 40px; }
+
+  .job {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .job .score {
+    flex: 0 0 44px; height: 44px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 15px; border: 1px solid var(--line);
+  }
+  .s-high   { background: #12261a; color: var(--green); }
+  .s-good   { background: #1f2b14; color: var(--lime); }
+  .s-mid    { background: #2b2410; color: var(--amber); }
+  .s-low    { background: #2b1d12; color: var(--orange); }
+  .job .body { flex: 1; min-width: 0; }
+  .job .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+  .job .title { font-size: 15px; font-weight: 600; }
+  .job .company { color: var(--muted); }
+  .job .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+  .chip {
+    background: var(--chip); border: 1px solid var(--line);
+    border-radius: 999px; padding: 1px 9px; font-size: 11px; color: var(--muted);
+  }
+  .chip.loc { color: var(--accent); }
+  .chip.sal { color: var(--lime); }
+  .job .why { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  details { margin-top: 6px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  details .desc { color: var(--text); font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
+  .empty { text-align: center; color: var(--muted); padding: 60px 0; }
+
+  footer { color: var(--muted); text-align: center; font-size: 12px; padding: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot">●</span> El Cazador <span style="color:var(--muted);font-size:13px">· Job Radar IA/Data Sales</span></h1>
+  <div class="meta" id="meta">cargando…</div>
+</header>
+
+<div class="filters">
+  <input type="text" id="q" placeholder="Buscar título, empresa…">
+  <label>match ≥ <input type="number" id="min" value="55" min="0" max="100" style="width:64px"></label>
+  <select id="country">
+    <option value="">País: todos</option>
+    <option value="NL">🇳🇱 Países Bajos</option>
+    <option value="CH">🇨🇭 Suiza</option>
+    <option value="SG">🇸🇬 Singapur</option>
+    <option value="EU">🌍 Europa / Remote</option>
+    <option value="other">Otro</option>
+  </select>
+  <select id="source"><option value="">Fuente: todas</option></select>
+  <label>€ min <input type="number" id="sal" placeholder="70000" style="width:90px"></label>
+  <select id="sort">
+    <option value="match">Orden: match</option>
+    <option value="salary">Orden: salario</option>
+    <option value="date">Orden: fecha</option>
+  </select>
+  <span class="count" id="count"></span>
+</div>
+
+<main id="list"><div class="empty">cargando datos…</div></main>
+<footer>El Cazador · datos recogidos con fuentes públicas (Adzuna, Greenhouse) · actualizado por GitHub Actions</footer>
+
+<script>
+"use strict";
+let DATA = [];
+
+const FMT = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
+
+function countryOf(loc) {
+  const l = (loc || "").toLowerCase();
+  if (/\b(netherlands|holland|amsterdam|utrecht|rotterdam|eindhoven|hague|nederland)\b/.test(l)) return "NL";
+  if (/\b(switzerland|swiss|zurich|zürich|geneva|lausanne|basel|schweiz)\b/.test(l)) return "CH";
+  if (/singapore/.test(l)) return "SG";
+  if (/\b(remote|emea|europe|uk|united kingdom|london|berlin|dublin|paris|brussels|munich|frankfurt|stockholm|oslo|copenhagen|vienna|warsaw|madrid|barcelona|lisbon|germany|france|belgium|denmark|austria|poland|spain|portugal|ireland|sweden|norway|finland|italy|luxembourg|czech)\b/.test(l)) return "EU";
+  return "other";
+}
+
+function scoreClass(m) {
+  if (m >= 85) return "s-high";
+  if (m >= 70) return "s-good";
+  if (m >= 55) return "s-mid";
+  return "s-low";
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function init() {
+  fetch("data/jobs.json").then(r => r.json()).then(d => {
+    DATA = d.jobs || [];
+    document.getElementById("meta").textContent =
+      d.generated ? "generado " + d.generated.replace("T", " ").slice(0, 16) + " · " + d.count + " ofertas" : d.count + " ofertas";
+    const sources = [...new Set(DATA.map(j => (j.source || "").split("-")[0]))].sort();
+    const sel = document.getElementById("source");
+    sources.forEach(s => { const o = document.createElement("option"); o.value = s; o.textContent = "Fuente: " + s; sel.appendChild(o); });
+    render();
+  }).catch(e => {
+    document.getElementById("list").innerHTML = '<div class="empty">No encuentro data/jobs.json (' + e + ')</div>';
+  });
+}
+
+function applyFilters() {
+  const q = (document.getElementById("q").value || "").toLowerCase();
+  const min = +document.getElementById("min").value || 0;
+  const country = document.getElementById("country").value;
+  const source = document.getElementById("source").value;
+  const sal = +document.getElementById("sal").value || 0;
+  const sort = document.getElementById("sort").value;
+
+  let out = DATA.filter(j => {
+    if (j.match < min) return false;
+    if (source && (j.source || "").split("-")[0] !== source) return false;
+    if (country && countryOf(j.location) !== country) return false;
+    if (sal && (j.salary_eur || 0) < sal) return false;
+    if (q) {
+      const blob = ((j.title || "") + " " + (j.company || "") + " " + (j.location || "")).toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (sort === "salary") out.sort((a, b) => (b.salary_eur || 0) - (a.salary_eur || 0));
+  else if (sort === "date") out.sort((a, b) => (b.posted || "").localeCompare(a.posted || ""));
+  else out.sort((a, b) => (b.match || 0) - (a.match || 0));
+
+  return out;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  const out = applyFilters();
+  document.getElementById("count").textContent = out.length + " ofertas";
+  if (!out.length) { list.innerHTML = '<div class="empty">Sin resultados con estos filtros.</div>'; return; }
+
+  list.innerHTML = out.map(j => {
+    const loc = esc(j.location || "—");
+    const chips = [];
+    chips.push('<span class="chip loc">' + countryOf(j.location) + '</span>');
+    chips.push('<span class="chip">' + esc((j.role_family || "").replace(" / ", "/")) + '</span>');
+    if (j.salary) chips.push('<span class="chip sal">' + esc(j.salary) + '</span>');
+    else if (j.salary_eur) chips.push('<span class="chip sal">€' + FMT.format(j.salary_eur) + '</span>');
+    if (j.posted) chips.push('<span class="chip">' + esc(j.posted) + '</span>');
+    chips.push('<span class="chip">' + esc(j.source || "") + '</span>');
+
+    const desc = j.description ? '<details><summary>ver detalle</summary><div class="desc">' + esc(j.description) + '</div></details>' : "";
+    const title = j.url
+      ? '<a class="title" href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.title) + '</a>'
+      : '<span class="title">' + esc(j.title) + '</span>';
+
+    return '<div class="job"><div class="score ' + scoreClass(j.match) + '">' + j.match +
+      '</div><div class="body"><div class="top">' + title +
+      '<span class="company">' + esc(j.company || "") + '</span><span class="loc">' + loc + '</span></div>' +
+      '<div class="chips">' + chips.join("") + '</div>' +
+      (j.why ? '<div class="why">' + esc(j.why) + '</div>' : "") + desc + '</div></div>';
+  }).join("");
+}
+
+["q", "min", "country", "source", "sal", "sort"].forEach(id =>
+  document.getElementById(id).addEventListener("input", render));
+
+init();
+</script>
+</body>
+</html>

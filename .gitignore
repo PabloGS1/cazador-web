@@ -1,0 +1,10 @@
+# Credenciales locales: nunca al repo
+secrets.yaml
+cv.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# Datos intermedios: raw se regenera en cada run
+web/data/raw_jobs.json

@@ -51,8 +51,36 @@
   .filters label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
   .filters .count { margin-left: auto; color: var(--muted); font-size: 13px; }
 
-  main { max-width: 1200px; margin: 0 auto; padding: 16px 20px 40px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 16px 20px 40px; }
 
+  /* ---------- KPIs ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .kpi .v { font-size: 24px; font-weight: 700; }
+  .kpi .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi.g .v { color: var(--green); } .kpi.a .v { color: var(--accent); }
+  .kpi.o .v { color: var(--orange); } .kpi.l .v { color: var(--lime); }
+
+  /* ---------- Resumen ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .panel h3 {
+    margin: 0; padding: 10px 14px; font-size: 13px; letter-spacing: .4px;
+    border-bottom: 1px solid var(--line); color: var(--muted);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 6px 10px; text-align: right; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; border-bottom: 1px solid var(--line); }
+  td:first-child, th:first-child { text-align: left; }
+  td.name { max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: var(--panel2); }
+  .bar { height: 4px; border-radius: 2px; background: var(--line); margin-top: 3px; }
+  .bar > i { display: block; height: 4px; border-radius: 2px; background: var(--accent); }
+
+  /* ---------- Lista ---------- */
   .job {
     background: var(--panel); border: 1px solid var(--line);
     border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
@@ -95,12 +123,17 @@
 
 <div class="filters">
   <input type="text" id="q" placeholder="Buscar título, empresa…">
-  <label>match ≥ <input type="number" id="min" value="55" min="0" max="100" style="width:64px"></label>
+  <label>match ≥ <input type="number" id="min" value="40" min="0" max="100" style="width:64px"></label>
   <select id="country">
     <option value="">País: todos</option>
     <option value="NL">🇳🇱 Países Bajos</option>
     <option value="CH">🇨🇭 Suiza</option>
     <option value="SG">🇸🇬 Singapur</option>
+    <option value="NO">🇳🇴 Noruega</option>
+    <option value="MX">🇲🇽 México</option>
+    <option value="TH">🇹🇭 Tailandia</option>
+    <option value="JP">🇯🇵 Japón</option>
+    <option value="KR">🇰🇷 Corea</option>
     <option value="EU">🌍 Europa / Remote</option>
     <option value="other">Otro</option>
   </select>
@@ -114,22 +147,49 @@
   <span class="count" id="count"></span>
 </div>
 
-<main id="list"><div class="empty">cargando datos…</div></main>
-<footer>El Cazador · datos recogidos con fuentes públicas (Adzuna, Greenhouse) · actualizado por GitHub Actions</footer>
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="panel"><h3>🌍 Por país</h3><div id="ag-pais"></div></div>
+    <div class="panel"><h3>🏙 Por ciudad (top 15)</h3><div id="ag-ciudad"></div></div>
+    <div class="panel"><h3>🏢 Por empresa (top 20)</h3><div id="ag-empresa"></div></div>
+    <div class="panel"><h3>💼 Por rol</h3><div id="ag-rol"></div></div>
+    <div class="panel"><h3>💰 Salario (tramos)</h3><div id="ag-sal"></div></div>
+    <div class="panel"><h3>📡 Por fuente</h3><div id="ag-fuente"></div></div>
+  </section>
+
+  <h3 style="color:var(--muted);letter-spacing:.4px;font-size:13px;margin:4px 0 10px">Ofertas</h3>
+  <div id="list"><div class="empty">cargando datos…</div></div>
+</main>
+
+<footer>El Cazador · datos de fuentes públicas (Adzuna, Greenhouse, Ashby, Workday, SmartRecruiters) · actualizado por GitHub Actions</footer>
 
 <script>
 "use strict";
 let DATA = [];
 
 const FMT = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
+const FMT1 = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
 
 function countryOf(loc) {
   const l = (loc || "").toLowerCase();
   if (/\b(netherlands|holland|amsterdam|utrecht|rotterdam|eindhoven|hague|nederland)\b/.test(l)) return "NL";
   if (/\b(switzerland|swiss|zurich|zürich|geneva|lausanne|basel|schweiz)\b/.test(l)) return "CH";
   if (/singapore/.test(l)) return "SG";
-  if (/\b(remote|emea|europe|uk|united kingdom|london|berlin|dublin|paris|brussels|munich|frankfurt|stockholm|oslo|copenhagen|vienna|warsaw|madrid|barcelona|lisbon|germany|france|belgium|denmark|austria|poland|spain|portugal|ireland|sweden|norway|finland|italy|luxembourg|czech)\b/.test(l)) return "EU";
+  if (/\b(norway|oslo|trondheim|stavanger|bergen|narvik)\b/.test(l)) return "NO";
+  if (/\b(mexico|méxico|guadalajara|queretaro|querétaro|tijuana|monterrey|mexicali)\b/.test(l)) return "MX";
+  if (/\b(thailand|bangkok|chonburi|ayutthaya|laem chabang)\b/.test(l)) return "TH";
+  if (/\b(japan|tokyo|osaka|yokohama|tsukuba)\b/.test(l)) return "JP";
+  if (/\b(korea|seoul|suwon|hwaseong|icheon)\b/.test(l)) return "KR";
+  if (/\b(remote|emea|europe|uk|united kingdom|london|berlin|dublin|paris|brussels|munich|frankfurt|stockholm|copenhagen|vienna|warsaw|madrid|barcelona|lisbon|germany|france|belgium|denmark|austria|poland|spain|portugal|ireland|sweden|finland|italy|luxembourg|czech)\b/.test(l)) return "EU";
   return "other";
+}
+const COUNTRY_LABEL = { NL: "🇳🇱 NL", CH: "🇨🇭 CH", SG: "🇸🇬 SG", NO: "🇳🇴 NO", MX: "🇲🇽 MX", TH: "🇹🇭 TH", JP: "🇯🇵 JP", KR: "🇰🇷 KR", EU: "🌍 EU/Remote", other: "Otro" };
+
+function cityOf(loc) {
+  const l = (loc || "").split(/[;·,–]/)[0].trim();
+  return l ? l.slice(0, 26) : "—";
 }
 
 function scoreClass(m) {
@@ -142,6 +202,10 @@ function scoreClass(m) {
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function eur(sal) {
+  return sal == null ? "—" : "€" + FMT.format(Math.round(sal));
 }
 
 function init() {
@@ -185,10 +249,98 @@ function applyFilters() {
   return out;
 }
 
+/* ---------- agregados ---------- */
+function agg(jobs, keyFn) {
+  const map = new Map();
+  for (const j of jobs) {
+    const k = keyFn(j);
+    if (!k) continue;
+    const e = map.get(k) || { n: 0, ms: 0, ss: 0, sn: 0, mx: 0 };
+    e.n++; e.ms += j.match || 0; e.mx = Math.max(e.mx, j.match || 0);
+    if (j.salary_eur) { e.ss += j.salary_eur; e.sn++; }
+    map.set(k, e);
+  }
+  return [...map.entries()].map(([k, e]) => ({
+    k, n: e.n, match: Math.round(e.ms / e.n),
+    sal: e.sn ? Math.round(e.ss / e.sn) : null, top: e.mx
+  })).sort((a, b) => b.n - a.n);
+}
+
+function table(rows, nameKey) {
+  if (!rows.length) return '<div class="empty" style="padding:20px">—</div>';
+  const max = Math.max(...rows.map(r => r.n)) || 1;
+  return '<table><thead><tr><th>' + nameKey + '</th><th>nº</th><th>match ø</th><th>salario ø</th></tr></thead><tbody>' +
+    rows.map(r =>
+      '<tr><td class="name" title="' + esc(r.k) + '">' + esc(r.k) + '</td>' +
+      '<td>' + r.n + '<div class="bar"><i style="width:' + Math.round(r.n / max * 100) + '%"></i></div></td>' +
+      '<td>' + r.match + '%</td><td>' + eur(r.sal) + '</td></tr>'
+    ).join("") + '</tbody></table>';
+}
+
+const BUCKETS = [
+  [0, 40000, "&lt; 40k"],
+  [40000, 70000, "40–70k"],
+  [70000, 100000, "70–100k"],
+  [100000, Infinity, "100k+"]
+];
+
+function renderSummary(out) {
+  const n = out.length;
+  const withSal = out.filter(j => j.salary_eur);
+  const avgMatch = n ? Math.round(out.reduce((s, j) => s + (j.match || 0), 0) / n) : 0;
+  const avgSal = withSal.length ? Math.round(withSal.reduce((s, j) => s + j.salary_eur, 0) / withSal.length) : null;
+  const companies = new Set(out.map(j => j.company)).size;
+  const countries = new Set(out.map(j => countryOf(j.location))).size;
+
+  document.getElementById("kpis").innerHTML = [
+    ['a', n, "ofertas"],
+    ['g', companies, "empresas"],
+    ['o', countries, "países"],
+    ['l', avgMatch + "%", "match medio"],
+    ['a', eur(avgSal), "salario medio"],
+    ['l', out.filter(j => j.match >= 80).length, "≥ 80 match"]
+  ].map(([cls, v, l]) => '<div class="kpi ' + cls + '"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>').join("");
+
+  // país
+  const pais = agg(out, j => countryOf(j.location)).map(r => ({ ...r, k: COUNTRY_LABEL[r.k] || r.k }));
+  document.getElementById("ag-pais").innerHTML = table(pais, "país");
+  // ciudad
+  document.getElementById("ag-ciudad").innerHTML = table(agg(out, j => cityOf(j.location)).slice(0, 15), "ciudad");
+  // empresa
+  document.getElementById("ag-empresa").innerHTML = table(agg(out, j => j.company || "—").slice(0, 20), "empresa");
+  // rol
+  document.getElementById("ag-rol").innerHTML = table(agg(out, j => (j.role_family || "otro").replace(" / ", "/")), "rol");
+  // fuente
+  document.getElementById("ag-fuente").innerHTML = table(agg(out, j => (j.source || "?").split("-")[0]), "fuente");
+
+  // salario por tramos
+  let salHtml = "";
+  if (withSal.length) {
+    const maxB = Math.max(...BUCKETS.map(b => out.filter(j => j.salary_eur >= b[0] && j.salary_eur < b[1]).length)) || 1;
+    salHtml = BUCKETS.map(([lo, hi, label]) => {
+      const c = out.filter(j => j.salary_eur >= lo && j.salary_eur < hi).length;
+      return '<tr><td>' + label + '</td><td>' + c + '<div class="bar"><i style="width:' +
+        Math.round(c / maxB * 100) + '%"></i></div></td><td>' + (c ? Math.round(c / n * 100) + "%" : "0%") + '</td></tr>';
+    }).join("");
+    const top10 = [...withSal].sort((a, b) => (b.salary_eur || 0) - (a.salary_eur || 0)).slice(0, 10);
+    salHtml += '</tbody></table><h3 style="padding:8px 14px 2px">Top salario</h3>' +
+      '<table><tbody>' + top10.map(j =>
+        '<tr><td class="name" style="max-width:230px">' + (j.url ? '<a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.title) + '</a>' : esc(j.title)) +
+        '</td><td>' + esc(j.company || "") + '</td><td>' + j.match + '%</td><td>' + eur(j.salary_eur) + '</td></tr>'
+      ).join("") + '</tbody></table>';
+    document.getElementById("ag-sal").innerHTML =
+      '<table><thead><tr><th>tramo</th><th>ofertas</th><th>%</th></tr></thead><tbody>' + salHtml;
+  } else {
+    document.getElementById("ag-sal").innerHTML = '<div class="empty" style="padding:20px">sin datos de salario con estos filtros</div>';
+  }
+}
+
 function render() {
-  const list = document.getElementById("list");
   const out = applyFilters();
   document.getElementById("count").textContent = out.length + " ofertas";
+  renderSummary(out);
+
+  const list = document.getElementById("list");
   if (!out.length) { list.innerHTML = '<div class="empty">Sin resultados con estos filtros.</div>'; return; }
 
   list.innerHTML = out.map(j => {

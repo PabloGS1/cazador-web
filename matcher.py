@@ -69,6 +69,7 @@ ENGINEERING_ONLY = re.compile(
     r"site reliability|qa engineer|tester|product designer|ux designer|"
     r"technical recruiter|recruiter|talent acquisition|accountant|"
     r"legal counsel|marketing manager|content writer|social media|"
+    r"counsel|legal|marketing|finance|recruiter|talent|hr|"
     r"engineer|engineering)\b", re.I)
 
 

@@ -2,10 +2,13 @@
 # Se comprueban todas en cada run; las que devuelvan 0 ofertas relevantes
 # se saltan solas. Añade/quita slugs libremente.
 #
-# - greenhouse: boards públicos (sin token), boletín en boards-api.greenhouse.io
-# - ashby:      startup board API en api.ashbyhq.com (muchas AI startups)
+# - greenhouse:       boards públicos (sin token) en boards-api.greenhouse.io
+# - ashby:            startup board API en api.ashbyhq.com (muchas AI startups)
+# - workday:          API CXS pública (POST) en {tenant}.{pod}.myworkdayjobs.com
+#                     formato de clave: tenant/pod/site (ver URL de careers)
+# - smartrecruiters:  API pública en api.smartrecruiters.com/v1/companies/{slug}
 #
-# Formato:  slug: Nombre mostrado
+# Formato:  slug (o tenant/pod/site): Nombre mostrado
 
 greenhouse:
   # IA / Data / Cloud / SaaS
@@ -51,6 +54,13 @@ greenhouse:
   samsara: Samsara
   reddit: Reddit
   robinhood: Robinhood
+  # Tu listado: AI cloud / infra IA / fintech
+  nebius: Nebius
+  adyen: Adyen
+  cognite: Cognite
+  nscaleoperationsukltd: nscale
+  coupang: Coupang
+  lgelectronics: LG Electronics
 
 ashby:
   # IA generativa y LLMs
@@ -78,3 +88,39 @@ ashby:
   modal: Modal
   weaviate: Weaviate
   astronomer: Astronomer
+
+workday:
+  # Semis / hardware / equipos
+  nxp/wd3/careers: NXP Semiconductors
+  analogdevices/wd1/External: Analog Devices
+  intel/wd1/External: Intel
+  sec/wd3/Samsung_Careers: Samsung Electronics
+  tel/wd3/TEL-Careers: Tokyo Electron
+  # Grandes tech / cloud / infra física
+  nvidia/wd5/NVIDIAExternalCareerSite: NVIDIA
+  cisco/wd5/Cisco_Careers: Cisco
+  equinix/wd1/External: Equinix
+  shell/wd3/ShellCareers: Shell
+  # Energía / electrónica de consumo
+  abb/wd3/external_career_page: ABB
+  hitachi/wd1/Hitachi: Hitachi (incl. Hitachi Energy)
+  iberdrola/wd3/Iberdrola: Iberdrola
+  # Fintech / software
+  ing/wd3/ICSGBLCOR: ING
+  temenos/wd103/Temenoscareers: Temenos
+  philips/wd3/jobs-and-careers: Philips
+  sonyglobal/wd1/SonyGlobalCareers: Sony
+  logitech/wd5/Logitech: Logitech
+  # Manufactura electrónica
+  jabil/wd5/Jabil_Careers: Jabil
+  flextronics/wd1/Careers: Flex
+
+smartrecruiters:
+  # Semis / energía / superapp
+  ASML1: ASML
+  RenesasElectronics: Renesas
+  WesternDigital: Western Digital
+  Statkraft1: Statkraft
+  Grab: Grab
+  Kioxia: Kioxia
+  DeltaElectronics: Delta Electronics

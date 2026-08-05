@@ -3,26 +3,29 @@
 CAZADOR SCRAPER — junta ofertas de fuentes públicas sin login.
 
 Fuentes:
-  - Adzuna        (NL / CH / SG)   API con app_id/app_key de secrets.yaml o env
-  - Greenhouse    (boards públicos, sin token) — lista en companies.yaml
-  - Ashby         (posting-api, sin token) — startups de IA, companies.yaml
-  - Lever         (api.lever.co)   opcional y desactivado por defecto
+  - Adzuna          (NL / CH / SG)  API con app_id/app_key de secrets.yaml o env
+  - Greenhouse      (boards públicos, sin token) — lista en companies.yaml
+  - Ashby           (posting-api, sin token) — startups de IA, companies.yaml
+  - Workday         (API CXS pública) — grandes empresas, companies.yaml
+  - SmartRecruiters (API pública) — ASML, Renesas, WD, Statkraft, Grab...
+  - Lever           (api.lever.co)  opcional y desactivado por defecto
                                     (a fecha de hoy responde 404 para casi todo)
 
 Salida: web/data/raw_jobs.json  (alimenta a matcher.py)
 
 Uso:
-    python scraper.py                     # adzuna + greenhouse + ashby
+    python scraper.py                     # adzuna + greenhouse + ashby + workday + sr
     python scraper.py --sources adzuna    # solo Adzuna
     python scraper.py --delay 0.5         # espera entre peticiones
 """
 import argparse
+import concurrent.futures
 import json
 import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -67,11 +70,16 @@ ADZUNA_QUERIES = [
 LEVER_COMPANIES = {}
 
 GREENHOUSE_GEO = re.compile(
-    r"\b(netherlands|holland|amsterdam|utrecht|rotterdam|eindhoven|hague|"
+    r"(?i)\b(netherlands|holland|amsterdam|utrecht|rotterdam|eindhoven|hague|"
     r"switzerland|swiss|zurich|zürich|geneva|lausanne|basel|"
     r"singapore|emea|remote|europe|berlin|munich|frankfurt|"
     r"dublin|london|brussels|paris|oslo|stockholm|copenhagen|vienna|"
-    r"warsaw|madrid|barcelona|lisbon|warsaw)\b", re.I)
+    r"warsaw|madrid|barcelona|lisbon|"
+    r"norway|trondheim|stavanger|bergen|"
+    r"mexico|méxico|guadalajara|queretaro|querétaro|tijuana|monterrey|mexicali|"
+    r"thailand|bangkok|chonburi|ayutthaya|"
+    r"japan|tokyo|osaka|yokohama|tsukuba|"
+    r"korea|seoul|suwon|hwaseong|icheon)\b")
 
 
 def log(*a):
@@ -201,9 +209,10 @@ def _keyword_sets(profile):
 
 
 GREENHOUSE_US = re.compile(
-    r"\b(united states|usa|san francisco|california|new york|texas|seattle|"
-    r"austin|chicago|atlanta|boston|denver|colorado|washington dc|"
-    r"new jersey|virginia|georgia|washington state|florida)\b", re.I)
+    r"(?i)\b(united states|usa|u\.?s\.?|san francisco|california|new york|texas|"
+    r"seattle|austin|chicago|atlanta|boston|denver|colorado|washington dc|"
+    r"new jersey|virginia|georgia|washington state|florida|santa clara|"
+    r"ca|ny|tx|wa|ma|il|ga|az|co|or|mn|nc|nj|va|md|ut|pa|oh|mi|wi)\b")
 
 
 def _geo_relevant(loc):
@@ -211,7 +220,14 @@ def _geo_relevant(loc):
 
 
 def _us_only(loc):
-    return bool(GREENHOUSE_US.search(loc or "")) and not _geo_relevant(loc)
+    loc = loc or ""
+    if not GREENHOUSE_US.search(loc):
+        return False
+    geo = GREENHOUSE_GEO.search(loc)
+    if not geo:
+        return True
+    # si el único "geo" es 'remote', la ubicación real es EE. UU.
+    return geo.group(0).lower() == "remote"
 
 
 def _relevant(title, loc, content, keywords):
@@ -322,6 +338,130 @@ def fetch_ashby(delay, profile, companies):
     return jobs
 
 
+# ------------------------------------------------------------------ Workday
+
+def _wd_url(tenant, pod, site, path):
+    return f"https://{tenant}.{pod}.myworkdayjobs.com{path or ''}"
+
+
+def _wd_date(posted):
+    """Workday lista fechas relativas ('Posted Today', 'Posted N days ago')."""
+    p = (posted or "").lower()
+    today = datetime.now(timezone.utc).date()
+    if "today" in p:
+        return today.isoformat()
+    if "yesterday" in p:
+        return (today - timedelta(days=1)).isoformat()
+    m = re.search(r"(\d+)\s*days?\s*ago", p)
+    if m:
+        return (today - timedelta(days=int(m.group(1)))).isoformat()
+    return ""
+
+
+def _fetch_workday_one(key, name, keywords, delay):
+    parts = key.split("/")
+    if len(parts) != 3:
+        return []
+    tenant, pod, site = parts
+    base = (f"https://{tenant}.{pod}.myworkdayjobs.com"
+            f"/wday/cxs/{tenant}/{site}/jobs")
+    jobs, seen, total, kept = [], set(), None, 0
+    offset = 0
+    while kept < CAP_PER_COMPANY:
+        try:
+            r = requests.post(base,
+                              headers={**HEADERS, "Accept": "application/json"},
+                              json={"limit": 20, "offset": offset}, timeout=30)
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            log(f"Workday {key}: error {e}")
+            break
+        if total is None:
+            total = data.get("total", 0)
+        page = data.get("jobPostings", [])
+        for item in page:
+            path = item.get("externalPath") or ""
+            if not path or path in seen or kept >= CAP_PER_COMPANY:
+                continue
+            seen.add(path)
+            title = item.get("title") or ""
+            loc = " ".join(filter(None, [item.get("locationsText"), path]))
+            if not _relevant(title, loc, "", keywords):
+                continue
+            kept += 1
+            jobs.append(_build_job(f"workday-{tenant}", f"workday-{tenant}-{path}",
+                                   title, name, loc, "",
+                                   _wd_url(tenant, pod, site, path),
+                                   _wd_date(item.get("postedOn"))))
+        if not page or (total and offset + len(page) >= total):
+            break
+        offset += len(page)
+    time.sleep(delay)
+    log(f"Workday {key}: {total or 0} publicadas -> {kept} relevantes")
+    return jobs
+
+
+def fetch_workday(delay, profile, companies):
+    role_kws, domain_kws = _keyword_sets(profile)
+    keywords = role_kws + domain_kws
+    jobs = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+        futs = [ex.submit(_fetch_workday_one, k, n, keywords, delay)
+                for k, n in companies.get("workday", {}).items()]
+        for f in concurrent.futures.as_completed(futs):
+            jobs += f.result()
+    log(f"Workday: {len(jobs)} ofertas")
+    return jobs
+
+
+# ----------------------------------------------------------- SmartRecruiters
+
+def _fetch_sr_one(slug, name, keywords, delay):
+    url = (f"https://api.smartrecruiters.com/v1/companies/{slug}"
+           "/postings?limit=100&offset=0")
+    data = get_json(url, label=f"SmartRecruiters {slug}", timeout=30)
+    if not isinstance(data, dict) or not data.get("content"):
+        time.sleep(delay)
+        return []
+    jobs, seen, kept = [], set(), 0
+    for item in data["content"]:
+        jid = item.get("id")
+        if not jid or jid in seen or kept >= CAP_PER_COMPANY:
+            continue
+        seen.add(jid)
+        title = item.get("name") or ""
+        loc_data = item.get("location") or {}
+        loc = (loc_data.get("fullLocation") or
+               ", ".join(filter(None, [loc_data.get("city"),
+                                       loc_data.get("region"),
+                                       loc_data.get("country")])))
+        if not _relevant(title, loc, "", keywords):
+            continue
+        kept += 1
+        jobs.append(_build_job(f"smartrecruiters-{slug}", f"sr-{slug}-{jid}",
+                               title, name, loc, "",
+                               f"https://jobs.smartrecruiters.com/{slug}/{jid}",
+                               (item.get("releasedDate") or "")[:10]))
+    time.sleep(delay)
+    log(f"SmartRecruiters {slug}: {data.get('totalFound', 0)} publicadas "
+        f"-> {kept} relevantes")
+    return jobs
+
+
+def fetch_smartrecruiters(delay, profile, companies):
+    role_kws, domain_kws = _keyword_sets(profile)
+    keywords = role_kws + domain_kws
+    jobs = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        futs = [ex.submit(_fetch_sr_one, s, n, keywords, delay)
+                for s, n in companies.get("smartrecruiters", {}).items()]
+        for f in concurrent.futures.as_completed(futs):
+            jobs += f.result()
+    log(f"SmartRecruiters: {len(jobs)} ofertas")
+    return jobs
+
+
 # ------------------------------------------------------------------- Lever
 
 def fetch_lever(delay):
@@ -365,7 +505,8 @@ def fetch_lever(delay):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sources", default="adzuna,greenhouse,ashby",
+    ap.add_argument("--sources",
+                    default="adzuna,greenhouse,ashby,workday,smartrecruiters",
                     help="fuentes separadas por coma")
     ap.add_argument("--delay", type=float, default=0.3,
                     help="segundos entre peticiones")
@@ -383,6 +524,10 @@ def main():
         all_jobs += fetch_greenhouse(args.delay, profile, companies)
     if "ashby" in sources:
         all_jobs += fetch_ashby(args.delay, profile, companies)
+    if "workday" in sources:
+        all_jobs += fetch_workday(args.delay, profile, companies)
+    if "smartrecruiters" in sources:
+        all_jobs += fetch_smartrecruiters(args.delay, profile, companies)
     if "lever" in sources:
         all_jobs += fetch_lever(args.delay)
 

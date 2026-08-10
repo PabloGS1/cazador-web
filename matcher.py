@@ -47,11 +47,11 @@ def _score_role(title_text, text, profile):
     se puntúa con menos (el título manda en ofertas de venta)."""
     for fam, cfg in profile["target_roles"].items():
         if _match_any(title_text, cfg["keywords"]):
-            return cfg["weight"], cfg["label"]
+            return cfg["weight"], cfg["label"], fam
     for fam, cfg in profile["target_roles"].items():
         if _match_any(text, cfg["keywords"]):
-            return cfg["weight"] - 15, cfg["label"]
-    return (0, "")
+            return max(0, cfg["weight"] - 20), cfg["label"], fam
+    return (0, "", "")
 
 
 def _role_keywords(profile):
@@ -71,6 +71,26 @@ ENGINEERING_ONLY = re.compile(
     r"legal counsel|marketing manager|content writer|social media|"
     r"counsel|legal|marketing|finance|recruiter|talent|hr|"
     r"engineer|engineering)\b", re.I)
+
+# Roles de soporte (legal/HR/finanzas/marketing) que NO son venta: fuera
+# aunque el título coincida con un keyword de rol (p.ej. "Commercial Counsel").
+HARD_BLOCK = re.compile(
+    r"\b(counsel|attorney|lawyer|compliance|paralegal|secretary|receptionist|"
+    r"accountant|accounting|audit|auditor|payroll|"
+    r"recruiter|talent acquisition|hr partner|hr business partner|"
+    r"content writer|social media|marketing manager|marketing director|"
+    r"community manager|support specialist|helpdesk)\b", re.I)
+
+# Títulos de rol técnico-comercial: si piden muchos años, bajan el match
+# (el usuario no quiere puestos "extremadamente demandantes" salvo en BD).
+TECH_ROLE_KEYWORDS = [
+    "sales engineer", "solutions engineer", "solution engineer", "presales",
+    "pre-sales", "pre sales", "technical sales", "solutions consultant",
+    "value engineer", "solutions architect", "technical account", "field engineer",
+    "product engineer", "product owner", "product manager", "product specialist",
+    "sales consultant", "technical consultant", "solutions advisor",
+]
+YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:-|–|to)?\s*\d{0,2}\s*years?\b", re.I)
 
 
 def _count_domain(text, profile):
@@ -117,10 +137,30 @@ CUR = {
     "myr": 0.21, "rm": 0.21,
     "mxn": 0.047, "mx$": 0.047,
     "thb": 0.026, "baht": 0.026, "฿": 0.026,
+    "gbp": 1.15, "£": 1.15,
+    "sek": 0.087, "dkk": 0.134,
+    "pln": 0.23, "czk": 0.041,
+    "cad": 0.66, "aud": 0.60, "nzd": 0.55,
+    "inr": 0.011, "brl": 0.18,
 }
 
 RANGE_RE = re.compile(r"(\d{2,3}(?:[.,]\d{3})*)\s*(?:-|–|to)\s*(\d{2,3}(?:[.,]\d{3})*)\s*(\w+)", re.I)
 SINGLE_RE = re.compile(r"(?:up to|circa|about|~)?\s*(\d{2,3}(?:[.,]\d{3})*)\s*(\w+)(?:\s*(?:per|/)\s*(year|annum|yr|month|mo|k))?", re.I)
+
+
+def _structured_salary(job):
+    """Usa salary_min/max (Adzuna) si existen; convierte a EUR."""
+    lo = job.get("salary_min")
+    if not lo:
+        return None, ""
+    hi = job.get("salary_max") or lo
+    cur = (job.get("salary_currency") or "eur").lower()
+    mult = _norm_currency(cur)
+    if not mult:
+        return None, ""
+    lo_e, hi_e = lo * mult, hi * mult
+    a, b = min(lo_e, hi_e), max(lo_e, hi_e)
+    return int(a), f"{a:,.0f}–{b:,.0f} {cur.upper()}"
 
 
 def _to_number(s):
@@ -159,6 +199,11 @@ def detect_salary(text):
     return int(lo), f"{lo:,.0f}–{hi:,.0f} {unit}"
 
 
+def _years_min(text):
+    yrs = [int(m.group(1)) for m in YEARS_RE.finditer(text)]
+    return min(yrs) if yrs else 0
+
+
 # ------------------------------------------------------------------ main
 
 def main():
@@ -178,21 +223,32 @@ def main():
     for j in jobs:
         title = (j.get("title") or "").lower()
         text = _text_of(j)
-        role_w, role_label = _score_role(title, text, profile)
+        role_w, role_label, role_fam = _score_role(title, text, profile)
         domain_hits = _count_domain(text, profile)
-        domain_w = min(domain_hits, 2) * 15
-        skills_w = min(_score_skills(text, profile), 5) * 3
+        domain_w = min(domain_hits, 3) * 10
+        skills_w = min(_score_skills(text, profile), 4) * 2
         loc_w = _score_location(j, profile)
         sen = _seniority_delta(text, profile)
 
         match = role_w + domain_w + skills_w + loc_w
-        match = max(0, min(100, match))
+        match = max(0, min(90, match))
         if sen < 0:
-            match = max(0, match - 5)
+            match = max(0, match - 4)
         if ENGINEERING_ONLY.search(title) and not _match_any(title, role_keywords):
-            match = max(0, match - 30)
+            match = max(0, match - 40)
+        if HARD_BLOCK.search(title):
+            match = max(0, match - 60)
+        # años de experiencia exigidos en roles técnico-comerciales
+        if role_fam and role_fam in ("sales_engineering", "product_engineer", "key_account"):
+            y = _years_min(text)
+            if y >= 9:
+                match = max(0, match - 10)
+            elif y >= 6:
+                match = max(0, match - 6)
 
-        sal_eur, sal_raw = detect_salary(text)
+        sal_eur, sal_raw = _structured_salary(j)
+        if not sal_eur:
+            sal_eur, sal_raw = detect_salary(text)
         if sal_eur and sal_eur < 30000:
             match = max(0, match - 5)
 

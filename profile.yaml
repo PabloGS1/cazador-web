@@ -1,42 +1,55 @@
-# PERFIL DE MATCH — derivado del CV de Pablo García-Salguero
-# Usado por matcher.py para puntuar cada oferta (0-100).
-# Familias de rol objetivo: IA/Data sales, Sales Engineer, Product Engineer, BDM.
+# PERFIL DE MATCH — derivado del CV de Pablo García-Salguero (LinkedIn + CV)
+# Usado por matcher.py para puntuar cada oferta (0-100, tope 90).
+# Perfil: AI & Big Data Sales (sector público), MBA, CFA L1. Exp. IoT/SaaS/Data Centers.
+# Roles objetivo: Sales/Solutions Engineer, Presales/Consultor técnico, BDM, KAM.
+# Regla del usuario: nada "extremadamente demandante" (5+ años / muchas certs) salvo BD.
 
 target_roles:
   # Familia -> palabras que disparan un match fuerte en el título
   "sales_engineering":
     label: "Sales / Solutions Engineer"
-    weight: 45
+    weight: 36
     keywords: ["sales engineer", "solutions engineer", "solution engineer", "presales",
                "pre-sales", "pre sales", "technical sales", "solutions consultant",
-               "value engineer", "solutions architect", "technical account", "field engineer"]
+               "value engineer", "solutions architect", "technical account", "field engineer",
+               "sales consultant", "technical consultant", "pre-sales engineer",
+               "solutions advisor", "presales consultant", "sales architect"]
   "ai_data_sales":
     label: "IA / Data Sales"
-    weight: 45
+    weight: 36
     keywords: ["ai sales", "data sales", "business development", "bdm", "b2b sales",
                "account executive", "account manager", "key account", "hunter",
-               "growth", "sales manager", "commercial", "sales executive", "seller"]
+               "sales manager", "sales executive", "seller",
+               "sales area manager", "account director", "area sales manager"]
+  "key_account":
+    label: "Key Account Manager"
+    weight: 34
+    keywords: ["key account manager", "kam", "key account", "strategic account",
+               "global account", "major accounts", "named account"]
   "product_engineer":
-    label: "Product Engineer / Product"
-    weight: 40
+    label: "Product / Pre-sales"
+    weight: 32
     keywords: ["product engineer", "product owner", "product manager", "technical product",
-               "product specialist", "solutions architect"]
+               "product specialist", "solutions architect", "pre-sales consultant",
+               "presales consultant", "sales consultant"]
   "bdm":
-    label: "Business Development Manager"
-    weight: 45
+    label: "Business Development"
+    weight: 34
     keywords: ["business development manager", "business development", "bdm",
-               "partnerships manager", "alliances", "channel manager", "partner manager"]
+               "partnerships manager", "alliances", "channel manager", "partner manager",
+               "go-to-market", "gtm manager", "new business"]
 
 domain_keywords:
-  # Dominio que multiplica el match: IA, Big Data, Cloud, IoT, DC, hardware IA
+  # Dominio que suma al match: IA, Big Data, Cloud, IoT, DC, sector público
   weight: 25
   keywords:
-    - ["artificial intelligence", "inteligencia artificial", "genai", "generative ai", "llm", "machine learning", "deep learning", "ai ", " ai", "rag"]
+    - ["artificial intelligence", "inteligencia artificial", "genai", "generative ai", "llm", "machine learning", "deep learning", "rag", "rag", "vector", "ai agents", "agentic", "agentica", "agents", " ai "]
     - ["big data", "data engineer", "data scientist", "data analyst", "data platform", "databricks", "snowflake", "spark", "hadoop", "etl", "data warehouse", "data lake"]
-    - ["data center", "datacenter", "data centre", "dc ", "colocation", "hyperscale", "gpu", "hpc", "compute"]
+    - ["data center", "datacenter", "data centre", "colocation", "hyperscale", "gpu", "hpc", "compute", "it infrastructure", "infrastructure", "ai infrastructure", "ai operations", "nvidia"]
     - ["cloud", "aws", "azure", "gcp", "kubernetes", "saas", "paas", "iaas"]
-    - ["iot", "smart city", "smart cities", "connectivity", "telecom"]
-    - ["openai", "anthropic", "gemini", "gpt", "copilot", "agent"]
+    - ["iot", "smart city", "smart cities", "connectivity", "telecom", "smart grid"]
+    - ["openai", "anthropic", "gemini", "gpt", "copilot", "agent", "chatbot", "virtual assistant", "automation", "generative", "rpa"]
+    - ["public sector", "government", "public administration", "public services", "citizen", "citizens", "tender", "tenders", "procurement", "public procurement", "licitación", "administración pública", "ayuntamiento", "public"]
 
 skills_from_cv:
   # Competencias del CV que suman al match si aparecen en la oferta
@@ -44,39 +57,56 @@ skills_from_cv:
   keywords: ["salesforce", "power bi", "sql", "rfp", "rfi", "proof of concept", "poc",
              "presales", "pre-sales", "pipeline", "kpi", "stakeholder", "consultative",
              "negotiation", "contract", "public sector", "government", "smart",
-             "cloud", "saas", "sap", "n8n", "business case", "go-to-market", "gtm"]
+             "cloud", "saas", "sap", "n8n", "business case", "go-to-market", "gtm",
+             "cold call", "cold outreach", "lead generation", "discovery", "use case",
+             "demo", "tender", "procurement", "dashboards", "ariba", "solutions architecture",
+             "architecture", "partner", "partners", "sales cycle", "deal",
+             "nvidia ai infrastructure", "ai infrastructure", "ai operations", "nvidia"]
 
 location_prefs:
-  # Prioridades de país de la estrategia (80/15/5)
+  # Prioridades de país (NL núcleo, CH/SG, EU/Remote, mercados del listado, origen)
   weight: 20
   scoring:
-    netherlands: 30
-    amsterdam: 30
-    nederland: 30
-    utrecht: 20
-    rotterdam: 15
-    eindhoven: 15
-    hague: 15
-    switzerland: 25
-    zurich: 25
-    zürich: 25
-    geneva: 20
-    lausanne: 20
-    basel: 15
-    singapore: 15
-    "remote - emea": 20
-    emea: 10
-    norway: 12
-    oslo: 12
-    denmark: 12
-    copenhagen: 12
-    aarhus: 10
-    austria: 10
-    vienna: 10
-    wien: 10
-    malaysia: 8
+    netherlands: 22
+    amsterdam: 22
+    nederland: 22
+    utrecht: 15
+    rotterdam: 12
+    eindhoven: 12
+    hague: 12
+    switzerland: 20
+    zurich: 20
+    zürich: 20
+    geneva: 15
+    lausanne: 15
+    basel: 12
+    singapore: 14
+    "remote - emea": 18
+    remote: 18
+    emea: 8
+    europe: 8
+    norway: 10
+    oslo: 10
+    denmark: 10
+    copenhagen: 10
+    aarhus: 8
+    austria: 8
+    vienna: 8
+    wien: 8
+    spain: 8
+    madrid: 12
+    barcelona: 10
+    germany: 8
+    berlin: 8
+    france: 8
+    paris: 8
+    belgium: 8
+    brussels: 8
+    malaysia: 6
     mexico: 5
     thailand: 5
+    japan: 4
+    korea: 4
 
 seniority:
   # Ajuste por seniority
@@ -113,3 +143,5 @@ query_keywords:
   - "data center"
   - "GPU"
   - "HPC"
+  - "public sector"
+  - "solutions consultant"

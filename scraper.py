@@ -44,16 +44,23 @@ HEADERS = {
                    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
 }
 
-# Portales de Adzuna que cubren la estrategia 80/15/5
+# Portales de Adzuna que cubren la estrategia: NL/CH/SG (núcleo) + EU/EMEA/MX
 ADZUNA_COUNTRIES = [
     ("nl", "Netherlands"),
     ("ch", "Switzerland"),
     ("sg", "Singapore"),
+    ("de", "Germany"),
+    ("at", "Austria"),
+    ("be", "Belgium"),
+    ("fr", "France"),
+    ("es", "Spain"),
+    ("mx", "Mexico"),
 ]
 
 # Límite de resultados por query y país: NL copa el grueso (80%),
 # CH y SG se recortan para respetar la estrategia 15/5.
-ADZUNA_CAP = {"nl": 40, "ch": 20, "sg": 15}
+ADZUNA_CAP = {"nl": 40, "ch": 20, "sg": 15, "de": 20, "at": 10,
+              "be": 10, "fr": 10, "es": 10, "mx": 10}
 ADZUNA_RETRIES = 3
 
 # Queries curadas para no quemar la cuota de la API (perfil.yaml)
@@ -63,6 +70,12 @@ ADZUNA_QUERIES = [
     "product manager", "product engineer", "cloud sales", "SaaS",
     "artificial intelligence", "machine learning", "data engineer",
     "data center", "GPU", "HPC",
+]
+# Países extra: menos queries para no disparar la cuota (NL/CH/SG usan la lista completa)
+ADZUNA_QUERIES_SHORT = [
+    "sales engineer", "solutions engineer", "presales",
+    "business development", "account manager", "key account",
+    "data center", "artificial intelligence", "SaaS",
 ]
 
 # Lever: el endpoint público responde 404 para la mayoría hoy; añade slugs

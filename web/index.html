@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TheHunter · Job Radar IA/Data Sales</title>
+  <link rel="icon" type="image/png" href="logo.png">
   <link rel="icon" type="image/svg+xml" href="logo.svg">
 <style>
   :root {
@@ -114,6 +115,15 @@
   details .desc { color: var(--text); font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
   .empty { text-align: center; color: var(--muted); padding: 60px 0; }
 
+  details.dash { margin-top: 24px; }
+  details.dash summary {
+    cursor: pointer; color: var(--muted); font-size: 13px; padding: 8px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    display: inline-block; user-select: none;
+  }
+  details.dash summary:hover { color: var(--accent); border-color: var(--accent); }
+  details.dash[open] summary { margin-bottom: 12px; }
+
   footer { color: var(--muted); text-align: center; font-size: 12px; padding: 20px; }
 
   @media (max-width: 720px) {
@@ -166,17 +176,20 @@
 <main>
   <section class="kpis" id="kpis"></section>
 
-  <section class="grid">
-    <div class="panel"><h3>🌍 Por país</h3><div id="ag-pais"></div></div>
-    <div class="panel"><h3>🏙 Por ciudad (top 15)</h3><div id="ag-ciudad"></div></div>
-    <div class="panel"><h3>🏢 Por empresa (top 20)</h3><div id="ag-empresa"></div></div>
-    <div class="panel"><h3>💼 Por rol</h3><div id="ag-rol"></div></div>
-    <div class="panel"><h3>💰 Salario (tramos)</h3><div id="ag-sal"></div></div>
-    <div class="panel"><h3>📡 Por fuente</h3><div id="ag-fuente"></div></div>
-  </section>
-
   <h3 style="color:var(--muted);letter-spacing:.4px;font-size:13px;margin:4px 0 10px">Ofertas</h3>
   <div id="list"><div class="empty">cargando datos…</div></div>
+
+  <details class="dash" id="dash">
+    <summary>📊 Análisis agregado (dashboard)</summary>
+    <section class="grid">
+      <div class="panel"><h3>🌍 Por país</h3><div id="ag-pais"></div></div>
+      <div class="panel"><h3>🏙 Por ciudad (top 15)</h3><div id="ag-ciudad"></div></div>
+      <div class="panel"><h3>🏢 Por empresa (top 20)</h3><div id="ag-empresa"></div></div>
+      <div class="panel"><h3>💼 Por rol</h3><div id="ag-rol"></div></div>
+      <div class="panel"><h3>💰 Salario (tramos)</h3><div id="ag-sal"></div></div>
+      <div class="panel"><h3>📡 Por fuente</h3><div id="ag-fuente"></div></div>
+    </section>
+  </details>
 </main>
 
 <footer>TheHunter · datos de fuentes públicas (Adzuna, Greenhouse, Ashby, Workday, SmartRecruiters) · actualizado por GitHub Actions</footer>

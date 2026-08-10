@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>El Cazador · Job Radar IA/Data Sales</title>
+<title>TheHunter · Job Radar IA/Data Sales</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
 <style>
   :root {
     --bg: #0d1117;
@@ -32,7 +33,8 @@
     padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
     background: linear-gradient(180deg, #12161c, var(--bg));
   }
-  header h1 { margin: 0; font-size: 22px; letter-spacing: .3px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .3px; display: flex; align-items: center; gap: 10px; }
+  header h1 .logo { width: 30px; height: 30px; flex: 0 0 auto; }
   header h1 .dot { color: var(--red); }
   header .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
 
@@ -66,10 +68,10 @@
 
   /* ---------- Resumen ---------- */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
   .panel h3 {
     margin: 0; padding: 10px 14px; font-size: 13px; letter-spacing: .4px;
-    border-bottom: 1px solid var(--line); color: var(--muted);
+    border-bottom: 1px solid var(--line); color: var(--muted); position: sticky; left: 0;
   }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   th, td { padding: 6px 10px; text-align: right; white-space: nowrap; }
@@ -113,11 +115,23 @@
   .empty { text-align: center; color: var(--muted); padding: 60px 0; }
 
   footer { color: var(--muted); text-align: center; font-size: 12px; padding: 20px; }
+
+  @media (max-width: 720px) {
+    header h1 { font-size: 19px; }
+    .filters { padding: 8px 12px; gap: 8px; position: static; }
+    .filters input[type=text] { width: 100%; }
+    main { padding: 12px 12px 30px; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+    .job { padding: 10px 12px; }
+    .job .score { flex-basis: 38px; height: 38px; font-size: 14px; }
+    td.name { max-width: 160px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1><span class="dot">●</span> El Cazador <span style="color:var(--muted);font-size:13px">· Job Radar IA/Data Sales</span></h1>
+  <h1><img class="logo" src="logo.svg" alt="TheHunter"><span>The<span class="dot">Hunter</span></span></h1>
   <div class="meta" id="meta">cargando…</div>
 </header>
 
@@ -130,6 +144,7 @@
     <option value="CH">🇨🇭 Suiza</option>
     <option value="SG">🇸🇬 Singapur</option>
     <option value="NO">🇳🇴 Noruega</option>
+    <option value="DK">🇩🇰 Dinamarca</option>
     <option value="MX">🇲🇽 México</option>
     <option value="TH">🇹🇭 Tailandia</option>
     <option value="JP">🇯🇵 Japón</option>
@@ -139,6 +154,7 @@
   </select>
   <select id="source"><option value="">Fuente: todas</option></select>
   <label>€ min <input type="number" id="sal" placeholder="70000" style="width:90px"></label>
+  <label style="cursor:pointer"><input type="checkbox" id="sal_nosal" checked> incluir sin salario</label>
   <select id="sort">
     <option value="match">Orden: match</option>
     <option value="salary">Orden: salario</option>
@@ -163,7 +179,7 @@
   <div id="list"><div class="empty">cargando datos…</div></div>
 </main>
 
-<footer>El Cazador · datos de fuentes públicas (Adzuna, Greenhouse, Ashby, Workday, SmartRecruiters) · actualizado por GitHub Actions</footer>
+<footer>TheHunter · datos de fuentes públicas (Adzuna, Greenhouse, Ashby, Workday, SmartRecruiters) · actualizado por GitHub Actions</footer>
 
 <script>
 "use strict";
@@ -178,14 +194,15 @@ function countryOf(loc) {
   if (/\b(switzerland|swiss|zurich|zürich|geneva|lausanne|basel|schweiz)\b/.test(l)) return "CH";
   if (/singapore/.test(l)) return "SG";
   if (/\b(norway|oslo|trondheim|stavanger|bergen|narvik)\b/.test(l)) return "NO";
+  if (/\b(denmark|copenhagen|aarhus|odense|aalborg|billund)\b/.test(l)) return "DK";
   if (/\b(mexico|méxico|guadalajara|queretaro|querétaro|tijuana|monterrey|mexicali)\b/.test(l)) return "MX";
   if (/\b(thailand|bangkok|chonburi|ayutthaya|laem chabang)\b/.test(l)) return "TH";
   if (/\b(japan|tokyo|osaka|yokohama|tsukuba)\b/.test(l)) return "JP";
   if (/\b(korea|seoul|suwon|hwaseong|icheon)\b/.test(l)) return "KR";
-  if (/\b(remote|emea|europe|uk|united kingdom|london|berlin|dublin|paris|brussels|munich|frankfurt|stockholm|copenhagen|vienna|warsaw|madrid|barcelona|lisbon|germany|france|belgium|denmark|austria|poland|spain|portugal|ireland|sweden|finland|italy|luxembourg|czech)\b/.test(l)) return "EU";
+  if (/\b(remote|emea|europe|uk|united kingdom|london|berlin|dublin|paris|brussels|munich|frankfurt|stockholm|vienna|warsaw|madrid|barcelona|lisbon|germany|france|belgium|austria|poland|spain|portugal|ireland|sweden|finland|italy|luxembourg|czech)\b/.test(l)) return "EU";
   return "other";
 }
-const COUNTRY_LABEL = { NL: "🇳🇱 NL", CH: "🇨🇭 CH", SG: "🇸🇬 SG", NO: "🇳🇴 NO", MX: "🇲🇽 MX", TH: "🇹🇭 TH", JP: "🇯🇵 JP", KR: "🇰🇷 KR", EU: "🌍 EU/Remote", other: "Otro" };
+const COUNTRY_LABEL = { NL: "🇳🇱 NL", CH: "🇨🇭 CH", SG: "🇸🇬 SG", NO: "🇳🇴 NO", DK: "🇩🇰 DK", MX: "🇲🇽 MX", TH: "🇹🇭 TH", JP: "🇯🇵 JP", KR: "🇰🇷 KR", EU: "🌍 EU/Remote", other: "Otro" };
 
 function cityOf(loc) {
   const l = (loc || "").split(/[;·,–]/)[0].trim();
@@ -228,13 +245,17 @@ function applyFilters() {
   const country = document.getElementById("country").value;
   const source = document.getElementById("source").value;
   const sal = +document.getElementById("sal").value || 0;
+  const salNosal = document.getElementById("sal_nosal").checked;
   const sort = document.getElementById("sort").value;
 
   let out = DATA.filter(j => {
     if (j.match < min) return false;
     if (source && (j.source || "").split("-")[0] !== source) return false;
     if (country && countryOf(j.location) !== country) return false;
-    if (sal && (j.salary_eur || 0) < sal) return false;
+    if (sal) {
+      if (j.salary_eur) { if (j.salary_eur < sal) return false; }
+      else if (!salNosal) return false;
+    }
     if (q) {
       const blob = ((j.title || "") + " " + (j.company || "") + " " + (j.location || "")).toLowerCase();
       if (!blob.includes(q)) return false;
@@ -368,6 +389,7 @@ function render() {
 
 ["q", "min", "country", "source", "sal", "sort"].forEach(id =>
   document.getElementById(id).addEventListener("input", render));
+document.getElementById("sal_nosal").addEventListener("change", render);
 
 init();
 </script>

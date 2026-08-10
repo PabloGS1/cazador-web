@@ -68,6 +68,9 @@ location_prefs:
     emea: 10
     norway: 12
     oslo: 12
+    denmark: 12
+    copenhagen: 12
+    aarhus: 10
     austria: 10
     vienna: 10
     wien: 10

@@ -76,6 +76,7 @@ GREENHOUSE_GEO = re.compile(
     r"dublin|london|brussels|paris|oslo|stockholm|copenhagen|vienna|"
     r"warsaw|madrid|barcelona|lisbon|"
     r"norway|trondheim|stavanger|bergen|"
+    r"denmark|copenhagen|aarhus|aalborg|odense|billund|"
     r"mexico|méxico|guadalajara|queretaro|querétaro|tijuana|monterrey|mexicali|"
     r"thailand|bangkok|chonburi|ayutthaya|"
     r"japan|tokyo|osaka|yokohama|tsukuba|"
@@ -341,7 +342,7 @@ def fetch_ashby(delay, profile, companies):
 # ------------------------------------------------------------------ Workday
 
 def _wd_url(tenant, pod, site, path):
-    return f"https://{tenant}.{pod}.myworkdayjobs.com{path or ''}"
+    return f"https://{tenant}.{pod}.myworkdayjobs.com/en-US/{site}{path or ''}"
 
 
 def _wd_date(posted):

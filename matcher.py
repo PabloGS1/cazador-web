@@ -8,6 +8,7 @@ Uso:
     python matcher.py [--min 40]
 """
 import argparse
+import html
 import json
 import re
 import sys
@@ -254,22 +255,42 @@ def detect_language(text):
     return best if bestn > 2 else "en"
 
 
-# Idiota local requerido pese a que la descripción esté en inglés:
-# "fluent in Dutch", "Dutch speaking", "must speak German", "French required"...
-# OJO: se excluye "english" a propósito (no es penalizable).
+# Idioma local requerido pese a que la descripción esté en inglés.
+# Búsqueda PREVENTIVA y amplia: cualquier mención de la lengua local en
+# contexto de requisito (fluent, speaking, required, native, & English...).
+# OJO: "english" queda fuera a propósito (no es penalizable) y los refs de
+# mercado ("in Germany", "German market", "Dutch customers") no casan con
+# estos patrones -> no se marcan.
 LOCAL_LANG_WORDS = (
     "dutch|flemish|german|french|italian|spanish|danish|norwegian|swedish|finnish|"
     "portuguese|japanese|korean|thai|chinese|mandarin|cantonese|turkish|polish|czech|"
     "hungarian|greek|arabic|russian|hindi|tamil|indonesian|vietnamese|malay"
 )
 LANG_REQ_RE = re.compile(
+    # fluencia directa: "fluent in German", "fluency in Dutch", "fluent German"
     r"fluen[ct](?:y)?\s+(?:in\s+)?(?:both\s+)?(?:" + LOCAL_LANG_WORDS + r")"
+    # "<lang> speaking/speaker/fluent/language/fluency" o "<lang>-speaking"
     r"|(?:" + LOCAL_LANG_WORDS + r")\s*(?:-|–)?\s*(?:fluen[ct](?:y)?|speaking|speaker|language)"
-    r"|(?:speak|speaks|must speak|must be fluent in)\s+(?:" + LOCAL_LANG_WORDS + r")"
-    r"|(?:" + LOCAL_LANG_WORDS + r")\s+(?:required|mandatory|native|mother tongue|essential|a must|is a must)"
-    r"|(?:native|fluent|proficient)\s+(?:speaker|fluency)?\s+(?:of|in)?\s*(?:" + LOCAL_LANG_WORDS + r")"
-    r"|(?:excellent|good|very good)\s+(?:command of|written and spoken|written & spoken|verbal and written)\s+(?:" + LOCAL_LANG_WORDS + r")"
-    r"|(?:working|business|office|company)\s+language[:\s]+(?:" + LOCAL_LANG_WORDS + r")",
+    # "speak/must speak [nivel] <lang>", "you speak <lang>"
+    r"|(?:you\s+)?(?:must\s+)?(?:speak|speaks)\s+(?:native-?level|native|fluent|business-?level|conversational|perfect|excellent|good)?\s+(?:" + LOCAL_LANG_WORDS + r")"
+    # "<lang> required/mandatory/native/mother tongue/essential/a must"
+    r"|(?:" + LOCAL_LANG_WORDS + r")\s+(?:required|mandatory|native|mother tongue|essential|a must|is a must|fluency)"
+    # "native-level <lang>", "native speaker of <lang>", "proficient in <lang>"
+    r"|(?:native-?level|native|fluent|proficient|perfect)\s+(?:speaker|fluency)?\s+(?:of|in)?\s*(?:" + LOCAL_LANG_WORDS + r")"
+    # "exceptional/excellent/strong... [verbal and written] <lang>"
+    r"|(?:exceptional|excellent|strong|perfect|good|very good|flawless|impeccable|business-?fluent)\s+(?:command of|written and spoken|written & spoken|verbal and written|written and verbal|verbal & written|oral and written|written and oral|spoken and written)\s+(?:" + LOCAL_LANG_WORDS + r")"
+    # working/business/office/company language: <lang>
+    r"|(?:working|business|office|company)\s+language[:\s]+(?:" + LOCAL_LANG_WORDS + r")"
+    # bilingual <lang>
+    r"|(?:bilingual|bi-lingual)\s+(?:in\s+)?(?:" + LOCAL_LANG_WORDS + r")"
+    # "<lang> & English", "<lang>/English", "<lang> and English" (y al revés)
+    r"|(?:" + LOCAL_LANG_WORDS + r")\s*(?:&|/)\s*english"
+    r"|english\s*(?:&|/)\s*(?:" + LOCAL_LANG_WORDS + r")"
+    r"|(?:" + LOCAL_LANG_WORDS + r")\s+and\s+english"
+    r"|english\s+and\s+(?:" + LOCAL_LANG_WORDS + r")"
+    # "communicate/communication [fluently] in <lang>"
+    r"|(?:communicate|communication)\s+(?:fluently\s+)?(?:in\s+)?(?:both\s+)?(?:" + LOCAL_LANG_WORDS + r")"
+    r"|(?:able|ability)\s+to\s+communicate\s+in\s+(?:" + LOCAL_LANG_WORDS + r")",
     re.I)
 LANG_WORD_RE = re.compile(r"(?:" + LOCAL_LANG_WORDS + r")", re.I)
 
@@ -278,8 +299,9 @@ def detect_local_lang(text):
     """Devuelve p.ej. 'dutch, french' si el puesto exige idioma(s) local(es)."""
     if not text:
         return ""
+    t = html.unescape(text)  # "German &amp; English" -> "German & English"
     langs = set()
-    for mtxt in LANG_REQ_RE.findall(text):
+    for mtxt in LANG_REQ_RE.findall(t):
         w = LANG_WORD_RE.search(mtxt)
         if w:
             langs.add(w.group(0).lower())

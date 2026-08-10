@@ -204,6 +204,51 @@ def _years_min(text):
     return min(yrs) if yrs else 0
 
 
+# ------------------------------------------------------------------ idioma
+
+# Stopwords por idioma: si la descripción está en el idioma local, es señal
+# de que buscan gente local -> el puesto baja mucho de match (preferencia
+# del usuario: solo ofertas en inglés). Se puntúa también el inglés para
+# evitar falsos positivos con palabras comunes (p.ej. "a", "de", "at").
+LANG_STOP = {
+    "en": [" the ", " and ", " with ", " your ", " our ", " experience ",
+           " opportunity ", " position ", " responsibilities ", " this role ",
+           " you will ", " we are ", " team ", " company ", " applicant "],
+    "nl": [" het ", " een ", " voor ", " met ", " wij ", " onze ", " jouw ",
+           " van ", " niet ", " deze ", " zijn "],
+    "de": [" der ", " die ", " das ", " und ", " mit ", " für ", " wir ", " sie ",
+           " ihre ", " nicht ", " sowie ", " diesem "],
+    "fr": [" le ", " la ", " les ", " des ", " pour ", " avec ", " vous ",
+           " notre ", " nos ", " dans ", " également "],
+    "es": [" el ", " los ", " las ", " para ", " con ", " nuestro ", " nuestra ",
+           " entre ", " sobre ", " también "],
+    "it": [" il ", " gli ", " per ", " con ", " della ", " delle ", " anche ",
+           " sono ", " nostro "],
+    "pt": [" são ", " você ", " nossa ", " nosso ", " também ", " experiência ",
+           " suas ", " seus "],
+    "da": [" og ", " det ", " er ", " ikke ", " vi ", " til ", " jeg "],
+    "sv": [" och ", " att ", " det ", " som ", " på ", " för ", " inte ", " har "],
+    "pl": [" oraz ", " dla ", " jest ", " są ", " się ", " nie ", " które "],
+}
+
+NON_LATIN_RE = re.compile(r"[\u3040-\u30ff\uac00-\ud7af\u0e00-\u0e7f\u4e00-\u9fff\u0600-\u06ff]")
+
+
+def detect_language(text):
+    if not text:
+        return "en"
+    t = " " + text.lower() + " "
+    nol = len(NON_LATIN_RE.findall(t))
+    if nol > 8:
+        return "xx"
+    best, bestn = "en", 0
+    for lang, stops in LANG_STOP.items():
+        n = sum(t.count(s) for s in stops)
+        if n > bestn:
+            best, bestn = lang, n
+    return best if bestn > 2 else "en"
+
+
 # ------------------------------------------------------------------ main
 
 def main():
@@ -225,7 +270,7 @@ def main():
         text = _text_of(j)
         role_w, role_label, role_fam = _score_role(title, text, profile)
         domain_hits = _count_domain(text, profile)
-        domain_w = min(domain_hits, 3) * 10
+        domain_w = min(domain_hits, 3) * 8
         skills_w = min(_score_skills(text, profile), 4) * 2
         loc_w = _score_location(j, profile)
         sen = _seniority_delta(text, profile)
@@ -251,6 +296,12 @@ def main():
             sal_eur, sal_raw = detect_salary(text)
         if sal_eur and sal_eur < 30000:
             match = max(0, match - 5)
+
+        # idioma: solo ofertas en inglés (local = buscan gente local)
+        lang = detect_language((j.get("description") or "")[:2500])
+        j["lang"] = lang
+        if lang != "en":
+            match = max(0, match - 30)
 
         if match < args.min or match > args.max:
             continue

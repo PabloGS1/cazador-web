@@ -61,6 +61,10 @@ greenhouse:
   nscaleoperationsukltd: nscale
   coupang: Coupang
   lgelectronics: LG Electronics
+  # IA frontier / security cloud (presencia EU/CH)
+  anthropic: Anthropic
+  scaleai: Scale AI
+  rubrik: Rubrik
 
 ashby:
   # IA generativa y LLMs
@@ -88,6 +92,9 @@ ashby:
   modal: Modal
   weaviate: Weaviate
   astronomer: Astronomer
+  # Cloud security / IA frontier
+  notion: Notion
+  wiz: Wiz
 
 workday:
   # Semis / hardware / equipos

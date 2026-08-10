@@ -59,8 +59,8 @@ ADZUNA_COUNTRIES = [
 
 # Límite de resultados por query y país: NL copa el grueso (80%),
 # CH y SG se recortan para respetar la estrategia 15/5.
-ADZUNA_CAP = {"nl": 40, "ch": 20, "sg": 15, "de": 20, "at": 10,
-              "be": 10, "fr": 10, "es": 10, "mx": 10}
+ADZUNA_CAP = {"nl": 60, "ch": 40, "sg": 20, "de": 30, "at": 15,
+              "be": 15, "fr": 15, "es": 15, "mx": 15}
 ADZUNA_RETRIES = 3
 
 # Queries curadas para no quemar la cuota de la API (perfil.yaml)

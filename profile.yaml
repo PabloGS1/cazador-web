@@ -67,46 +67,46 @@ location_prefs:
   # Prioridades de país (NL núcleo, CH/SG, EU/Remote, mercados del listado, origen)
   weight: 20
   scoring:
-    netherlands: 22
-    amsterdam: 22
-    nederland: 22
-    utrecht: 15
-    rotterdam: 12
-    eindhoven: 12
-    hague: 12
-    switzerland: 20
-    zurich: 20
-    zürich: 20
-    geneva: 15
-    lausanne: 15
-    basel: 12
-    singapore: 14
-    "remote - emea": 18
-    remote: 18
-    emea: 8
-    europe: 8
-    norway: 10
-    oslo: 10
-    denmark: 10
-    copenhagen: 10
-    aarhus: 8
-    austria: 8
-    vienna: 8
-    wien: 8
-    spain: 8
-    madrid: 12
-    barcelona: 10
-    germany: 8
-    berlin: 8
-    france: 8
-    paris: 8
-    belgium: 8
-    brussels: 8
-    malaysia: 6
-    mexico: 5
-    thailand: 5
-    japan: 4
-    korea: 4
+    netherlands: 18
+    amsterdam: 18
+    nederland: 18
+    utrecht: 13
+    rotterdam: 10
+    eindhoven: 10
+    hague: 10
+    switzerland: 18
+    zurich: 18
+    zürich: 18
+    geneva: 13
+    lausanne: 13
+    basel: 10
+    singapore: 12
+    "remote - emea": 16
+    remote: 16
+    emea: 6
+    europe: 6
+    norway: 9
+    oslo: 9
+    denmark: 9
+    copenhagen: 9
+    aarhus: 7
+    austria: 7
+    vienna: 7
+    wien: 7
+    spain: 7
+    madrid: 10
+    barcelona: 8
+    germany: 7
+    berlin: 7
+    france: 7
+    paris: 7
+    belgium: 7
+    brussels: 7
+    malaysia: 5
+    mexico: 4
+    thailand: 4
+    japan: 3
+    korea: 3
 
 seniority:
   # Ajuste por seniority

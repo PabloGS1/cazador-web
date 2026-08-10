@@ -109,6 +109,8 @@
   }
   .chip.loc { color: var(--accent); }
   .chip.sal { color: var(--lime); }
+  .job .star { color: var(--amber); }
+  .job .company .star { margin-right: 2px; }
   .job .why { color: var(--muted); font-size: 12px; margin-top: 4px; }
   details { margin-top: 6px; }
   summary { cursor: pointer; color: var(--muted); font-size: 12px; }
@@ -163,6 +165,9 @@
     <option value="other">Otro</option>
   </select>
   <select id="source"><option value="">Fuente: todas</option></select>
+  <select id="company"><option value="">Empresa: todas</option></select>
+  <label style="cursor:pointer"><input type="checkbox" id="onlylist"> solo listado ★</label>
+  <label style="cursor:pointer"><input type="checkbox" id="lang_en" checked> solo inglés</label>
   <label>€ min <input type="number" id="sal" placeholder="70000" style="width:90px"></label>
   <label style="cursor:pointer"><input type="checkbox" id="sal_nosal" checked> incluir sin salario</label>
   <select id="sort">
@@ -197,6 +202,12 @@
 <script>
 "use strict";
 let DATA = [];
+
+const LISTED = ["Databricks","MongoDB","Datadog","Elastic","Okta","Twilio","GitLab","Dataiku","Celonis","Fivetran","Neo4j","Cloudflare","CoreWeave","Fastly","Netskope","Zscaler","Pure Storage","JFrog","New Relic","Sumo Logic","Figma","Asana","Airtable","Mixpanel","Amplitude","Intercom","Typeform","Catawiki","Dropbox","Stripe","DataCamp","Coursera","Squarespace","Culture Amp","Duolingo","Samsara","Reddit","Robinhood","Nebius","Adyen","Cognite","nscale","Coupang","LG Electronics","Anthropic","Scale AI","Rubrik","Cohere","ElevenLabs","Cursor","Perplexity AI","LangChain","Runway","Harvey","Writer","Cognition","Sierra","Lovable","Decagon","Character.AI","Replit","Linear","Vanta","Synthesia","DeepL","RunPod","Fireworks AI","Modal","Weaviate","Astronomer","Notion","Wiz","NXP Semiconductors","Analog Devices","Intel","Samsung Electronics","Tokyo Electron","NVIDIA","Cisco","Equinix","Shell","ABB","Hitachi","Iberdrola","ING","Temenos","Philips","Sony","Logitech","Jabil","Flex","ASML","Renesas","Western Digital","Statkraft","Grab","Kioxia","Delta Electronics"];
+function isListed(c) {
+  const s = (c || "").toLowerCase();
+  return LISTED.some(n => s.includes(n.toLowerCase()));
+}
 
 const FMT = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
 const FMT1 = new Intl.NumberFormat("es", { maximumFractionDigits: 0 });
@@ -246,6 +257,9 @@ function init() {
     const sources = [...new Set(DATA.map(j => (j.source || "").split("-")[0]))].sort();
     const sel = document.getElementById("source");
     sources.forEach(s => { const o = document.createElement("option"); o.value = s; o.textContent = "Fuente: " + s; sel.appendChild(o); });
+    const comps = [...new Set(DATA.map(j => j.company).filter(Boolean))].sort();
+    const csel = document.getElementById("company");
+    comps.forEach(c => { const o = document.createElement("option"); o.value = c; o.textContent = (isListed(c) ? "★ " : "") + c; csel.appendChild(o); });
     render();
   }).catch(e => {
     document.getElementById("list").innerHTML = '<div class="empty">No encuentro data/jobs.json (' + e + ')</div>';
@@ -257,6 +271,9 @@ function applyFilters() {
   const min = +document.getElementById("min").value || 0;
   const country = document.getElementById("country").value;
   const source = document.getElementById("source").value;
+  const company = document.getElementById("company").value;
+  const onlylist = document.getElementById("onlylist").checked;
+  const langEn = document.getElementById("lang_en").checked;
   const sal = +document.getElementById("sal").value || 0;
   const salNosal = document.getElementById("sal_nosal").checked;
   const sort = document.getElementById("sort").value;
@@ -265,6 +282,9 @@ function applyFilters() {
     if (j.match < min) return false;
     if (source && (j.source || "").split("-")[0] !== source) return false;
     if (country && countryOf(j.location) !== country) return false;
+    if (company && (j.company || "") !== company) return false;
+    if (onlylist && !isListed(j.company)) return false;
+    if (langEn && (j.lang || "en") !== "en") return false;
     if (sal) {
       if (j.salary_eur) { if (j.salary_eur < sal) return false; }
       else if (!salNosal) return false;
@@ -394,15 +414,16 @@ function render() {
 
     return '<div class="job"><div class="score ' + scoreClass(j.match) + '">' + j.match +
       '</div><div class="body"><div class="top">' + title +
-      '<span class="company">' + esc(j.company || "") + '</span><span class="loc">' + loc + '</span></div>' +
-      '<div class="chips">' + chips.join("") + '</div>' +
+      '<span class="company">' + (isListed(j.company) ? '<span class="star" title="empresa del listado">★</span> ' : "") + esc(j.company || "") + '</span><span class="loc">' + loc + '</span></div>' +
+      '<div class="chips">' + chips.join("") + (j.lang && j.lang !== "en" ? '<span class="chip" style="color:var(--amber)">' + esc(j.lang) + '</span>' : "") + '</div>' +
       (j.why ? '<div class="why">' + esc(j.why) + '</div>' : "") + desc + '</div></div>';
   }).join("");
 }
 
-["q", "min", "country", "source", "sal", "sort"].forEach(id =>
+["q", "min", "country", "source", "company", "onlylist", "lang_en", "sal", "sort"].forEach(id =>
   document.getElementById(id).addEventListener("input", render));
-document.getElementById("sal_nosal").addEventListener("change", render);
+["onlylist", "lang_en", "sal_nosal"].forEach(id =>
+  document.getElementById(id).addEventListener("change", render));
 
 init();
 </script>

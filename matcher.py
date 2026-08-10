@@ -149,18 +149,21 @@ SINGLE_RE = re.compile(r"(?:up to|circa|about|~)?\s*(\d{2,3}(?:[.,]\d{3})*)\s*(\
 
 
 def _structured_salary(job):
-    """Usa salary_min/max (Adzuna) si existen; convierte a EUR."""
+    """Usa salary_min/max (Adzuna) si existen; convierte a EUR.
+    Devuelve (min_eur, max_eur, raw). Valores anuales < 20k son basura
+    (parses rotos tipo "€45" o "por hora/semana") -> se descartan."""
     lo = job.get("salary_min")
     if not lo:
-        return None, ""
+        return None, None, ""
     hi = job.get("salary_max") or lo
     cur = (job.get("salary_currency") or "eur").lower()
     mult = _norm_currency(cur)
     if not mult:
-        return None, ""
-    lo_e, hi_e = lo * mult, hi * mult
-    a, b = min(lo_e, hi_e), max(lo_e, hi_e)
-    return int(a), f"{a:,.0f}–{b:,.0f} {cur.upper()}"
+        return None, None, ""
+    a, b = sorted((lo * mult, hi * mult))
+    if a < 20000:
+        return None, None, ""
+    return int(a), int(b), f"{a:,.0f}–{b:,.0f} {cur.upper()}"
 
 
 def _to_number(s):
@@ -176,7 +179,7 @@ def _norm_currency(unit):
 
 
 def detect_salary(text):
-    """Devuelve (min_eur_aprox, raw). No filtra, solo informa."""
+    """Devuelve (min_eur_aprox, max_eur, raw). No filtra, solo informa."""
     found = []
     for m in RANGE_RE.finditer(text):
         a, b, unit = m.groups()
@@ -193,10 +196,12 @@ def detect_salary(text):
                 amount *= 12
             found.append((amount, amount, m.group(0)))
     if not found:
-        return None, ""
+        return None, None, ""
     lo = min(f[0] for f in found)
     hi = max(f[1] for f in found)
-    return int(lo), f"{lo:,.0f}–{hi:,.0f} {unit}"
+    if lo < 20000:  # descarta parses rotos (horas, semanas, €45...)
+        return None, None, ""
+    return int(lo), int(hi), found[0][2]
 
 
 def _years_min(text):
@@ -249,6 +254,38 @@ def detect_language(text):
     return best if bestn > 2 else "en"
 
 
+# Idiota local requerido pese a que la descripción esté en inglés:
+# "fluent in Dutch", "Dutch speaking", "must speak German", "French required"...
+# OJO: se excluye "english" a propósito (no es penalizable).
+LOCAL_LANG_WORDS = (
+    "dutch|flemish|german|french|italian|spanish|danish|norwegian|swedish|finnish|"
+    "portuguese|japanese|korean|thai|chinese|mandarin|cantonese|turkish|polish|czech|"
+    "hungarian|greek|arabic|russian|hindi|tamil|indonesian|vietnamese|malay"
+)
+LANG_REQ_RE = re.compile(
+    r"fluen[ct](?:y)?\s+(?:in\s+)?(?:both\s+)?(?:" + LOCAL_LANG_WORDS + r")"
+    r"|(?:" + LOCAL_LANG_WORDS + r")\s*(?:-|–)?\s*(?:fluen[ct](?:y)?|speaking|speaker|language)"
+    r"|(?:speak|speaks|must speak|must be fluent in)\s+(?:" + LOCAL_LANG_WORDS + r")"
+    r"|(?:" + LOCAL_LANG_WORDS + r")\s+(?:required|mandatory|native|mother tongue|essential|a must|is a must)"
+    r"|(?:native|fluent|proficient)\s+(?:speaker|fluency)?\s+(?:of|in)?\s*(?:" + LOCAL_LANG_WORDS + r")"
+    r"|(?:excellent|good|very good)\s+(?:command of|written and spoken|written & spoken|verbal and written)\s+(?:" + LOCAL_LANG_WORDS + r")"
+    r"|(?:working|business|office|company)\s+language[:\s]+(?:" + LOCAL_LANG_WORDS + r")",
+    re.I)
+LANG_WORD_RE = re.compile(r"(?:" + LOCAL_LANG_WORDS + r")", re.I)
+
+
+def detect_local_lang(text):
+    """Devuelve p.ej. 'dutch, french' si el puesto exige idioma(s) local(es)."""
+    if not text:
+        return ""
+    langs = set()
+    for mtxt in LANG_REQ_RE.findall(text):
+        w = LANG_WORD_RE.search(mtxt)
+        if w:
+            langs.add(w.group(0).lower())
+    return ", ".join(sorted(langs))
+
+
 # ------------------------------------------------------------------ main
 
 def main():
@@ -291,16 +328,22 @@ def main():
             elif y >= 6:
                 match = max(0, match - 6)
 
-        sal_eur, sal_raw = _structured_salary(j)
-        if not sal_eur:
-            sal_eur, sal_raw = detect_salary(text)
-        if sal_eur and sal_eur < 30000:
+        sal_min_eur, sal_max_eur, sal_raw = _structured_salary(j)
+        if not sal_min_eur:
+            sal_min_eur, sal_max_eur, sal_raw = detect_salary(text)
+        if sal_min_eur and sal_min_eur < 30000:
             match = max(0, match - 5)
 
         # idioma: solo ofertas en inglés (local = buscan gente local)
         lang = detect_language((j.get("description") or "")[:2500])
         j["lang"] = lang
         if lang != "en":
+            match = max(0, match - 30)
+
+        # idioma local exigido pese a estar en inglés (p.ej. "Dutch fluency")
+        lang_req = detect_local_lang(text)
+        j["lang_req"] = lang_req
+        if lang_req:
             match = max(0, match - 30)
 
         if match < args.min or match > args.max:
@@ -313,12 +356,15 @@ def main():
             reasons.append(f"{domain_hits} dominios IA/Data")
         if skills_w:
             reasons.append("skills CV")
+        if lang_req:
+            reasons.append(f"requiere {lang_req}")
 
         j["match"] = match
         j["role_family"] = role_label or "otro"
         j["why"] = "; ".join(reasons)
         j["salary"] = sal_raw or ""
-        j["salary_eur"] = sal_eur
+        j["salary_eur"] = sal_min_eur
+        j["salary_max_eur"] = sal_max_eur
         j["summary"] = " · ".join(filter(None, [
             j.get("title"),
             j.get("company"),

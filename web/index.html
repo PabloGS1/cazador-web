@@ -109,6 +109,7 @@
   }
   .chip.loc { color: var(--accent); }
   .chip.sal { color: var(--lime); }
+  .chip.langreq { color: var(--red); border-color: #f8514955; background: #2d1518; }
   .job .star { color: var(--amber); }
   .job .company .star { margin-right: 2px; }
   .job .why { color: var(--muted); font-size: 12px; margin-top: 4px; }
@@ -168,7 +169,7 @@
   <select id="company"><option value="">Empresa: todas</option></select>
   <label style="cursor:pointer"><input type="checkbox" id="onlylist"> solo listado ★</label>
   <label style="cursor:pointer"><input type="checkbox" id="lang_en" checked> solo inglés</label>
-  <label>€ min <input type="number" id="sal" placeholder="70000" style="width:90px"></label>
+  <label title="Salario anual en EUR: se muestran ofertas cuyo tope de rango llega a esa cifra">€ año min <input type="number" id="sal" placeholder="70000" style="width:90px"></label>
   <label style="cursor:pointer"><input type="checkbox" id="sal_nosal" checked> incluir sin salario</label>
   <select id="sort">
     <option value="match">Orden: match</option>
@@ -284,9 +285,9 @@ function applyFilters() {
     if (country && countryOf(j.location) !== country) return false;
     if (company && (j.company || "") !== company) return false;
     if (onlylist && !isListed(j.company)) return false;
-    if (langEn && (j.lang || "en") !== "en") return false;
+    if (langEn && ((j.lang || "en") !== "en" || j.lang_req)) return false;
     if (sal) {
-      if (j.salary_eur) { if (j.salary_eur < sal) return false; }
+      if (j.salary_eur) { if ((j.salary_max_eur || j.salary_eur) < sal) return false; }
       else if (!salNosal) return false;
     }
     if (q) {
@@ -296,7 +297,7 @@ function applyFilters() {
     return true;
   });
 
-  if (sort === "salary") out.sort((a, b) => (b.salary_eur || 0) - (a.salary_eur || 0));
+  if (sort === "salary") out.sort((a, b) => (b.salary_max_eur || b.salary_eur || 0) - (a.salary_max_eur || a.salary_eur || 0));
   else if (sort === "date") out.sort((a, b) => (b.posted || "").localeCompare(a.posted || ""));
   else out.sort((a, b) => (b.match || 0) - (a.match || 0));
 
@@ -402,6 +403,7 @@ function render() {
     const chips = [];
     chips.push('<span class="chip loc">' + countryOf(j.location) + '</span>');
     chips.push('<span class="chip">' + esc((j.role_family || "").replace(" / ", "/")) + '</span>');
+    if (j.lang_req) chips.push('<span class="chip langreq" title="piden idioma local aunque el anuncio esté en inglés">requiere ' + esc(j.lang_req) + '</span>');
     if (j.salary) chips.push('<span class="chip sal">' + esc(j.salary) + '</span>');
     else if (j.salary_eur) chips.push('<span class="chip sal">€' + FMT.format(j.salary_eur) + '</span>');
     if (j.posted) chips.push('<span class="chip">' + esc(j.posted) + '</span>');

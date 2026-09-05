@@ -1,7 +1,35 @@
-// GENERADO desde profile.yaml — no editar a mano.
-import type { Profile } from "./scoring.js";
+// GENERADO por make_default_profile.py desde profile.yaml - no editar a mano.
+export interface DefaultProfile {
+  role_taxonomy: {
+    tier_a: { weight: number; label: string; titles: string[] };
+    tier_b: { weight: number; label: string; titles: string[] };
+    tier_c: { weight: number; label: string; titles: string[] };
+  };
+  anti_identity: { reject_title_patterns: string[] };
+  hard_reject: {
+    languages_forbidden: string[];
+    languages_spoken: string[];
+    max_years_experience: number;
+    restricted_locations: string[];
+    forbidden_certs: string[];
+    production_patterns: string[];
+    established_network_patterns: string[];
+  };
+  geography: { weight: number; scoring: Record<string, number> };
+  domain_keywords: { weight: number; keywords: string[][] };
+  skills_keywords: { weight: number; keywords: string[] };
+  seniority: {
+    bonus: string[];
+    penalty: string[];
+    director_penalty: number;
+    junior_penalty: number;
+  };
+  spoken_languages: string[];
+  min_match: number;
+  max_match: number;
+}
 
-export const DEFAULT_PROFILE: Profile = {
+export const DEFAULT_PROFILE: DefaultProfile = {
   "role_taxonomy": {
     "tier_a": {
       "weight": 1.0,
@@ -10,28 +38,41 @@ export const DEFAULT_PROFILE: Profile = {
         "account executive",
         "enterprise account executive",
         "strategic account executive",
+        "account director",
+        "account manager",
+        "key account manager",
+        "kam",
+        "enterprise account manager",
+        "business development",
         "business development manager",
         "business development director",
+        "business development lead",
+        "partnership",
+        "partnerships",
+        "partner manager",
+        "alliances manager",
+        "alliance manager",
+        "channel manager",
         "solutions consultant",
         "business value consultant",
         "value engineer",
         "sales engineer",
+        "pre-sales",
+        "presales",
         "solutions engineer",
+        "solution engineer",
+        "solutions architect",
         "pre-sales consultant",
         "presales consultant",
         "technical account manager",
         "enterprise sales manager",
+        "public sector account manager",
+        "government account executive",
+        "public sector account executive",
         "bid manager",
         "proposal manager",
         "capture manager",
-        "partner manager",
-        "alliances manager",
-        "channel manager",
-        "public sector account manager",
-        "government account executive",
-        "account manager",
-        "key account manager",
-        "kam"
+        "deal manager"
       ]
     },
     "tier_b": {
@@ -51,7 +92,7 @@ export const DEFAULT_PROFILE: Profile = {
     },
     "tier_c": {
       "weight": 0.4,
-      "label": "DC/AI infra",
+      "label": "Solo data centre / AI infra",
       "titles": [
         "development manager",
         "origination manager",
@@ -75,7 +116,6 @@ export const DEFAULT_PROFILE: Profile = {
       "site reliability",
       "cloud engineer",
       "security engineer",
-      "solutions architect",
       "ai architect",
       "implementation consultant",
       "technical support",
@@ -124,7 +164,7 @@ export const DEFAULT_PROFILE: Profile = {
       "spanish",
       "french"
     ],
-    "max_years_experience": 6,
+    "max_years_experience": 8,
     "restricted_locations": [
       "us only",
       "united states only",
@@ -136,21 +176,17 @@ export const DEFAULT_PROFILE: Profile = {
     "forbidden_certs": [
       "aws solutions architect professional",
       "aws sa pro",
-      "cka",
       "cissp",
-      "comptia"
+      "comptia",
+      "ccnp",
+      "ccie"
     ],
     "production_patterns": [
       "on-call",
       "on call",
-      "sla",
       "incident response",
       "code review",
-      "pull request",
-      "ci/cd",
-      "kubernetes",
-      "terraform",
-      "ansible"
+      "pull request"
     ],
     "established_network_patterns": [
       "well-connected in",

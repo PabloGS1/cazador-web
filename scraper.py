@@ -13,9 +13,12 @@ Fuentes activas por defecto:
   - Jobindex        (RSS público, sin token) — Dinamarca (100 ofertas)
   - SwissDevJobs    (RSS público) — Suiza (187 ofertas)
   - Amazon          (search.json API) — global (50 ofertas por query)
+  - RemoteOk        (JSON público) — remote global
+  - Arbeitnow       (JSON público) — Europa/remote
+  - Remotive        (JSON público) — remote global
   - Microsoft/Google/Meta/Apple — HTML scraping (0 sin headless browser)
   - Jooble          (API key necesaria)
-  - Careerjet       (affiliate API)
+  - Careerjet       (affiliate API, en secrets.yaml; 403 hasta aprobar)
   - NVB             (API — 403 anti-bot)
   - WTTJ            (Algolia API) — Francia
 
@@ -137,6 +140,23 @@ WTTJ_QUERIES = [
     "sales engineer", "account executive", "business development",
     "account manager", "key account", "technical account manager",
 ]
+
+# Fuentes remote-global sin API key (JSON públicos)
+REMOTEOK_URL = "https://remoteok.com/api"
+ARBEITNOW_URL = "https://www.arbeitnow.com/api/job-board-api"
+REMOTIVE_URL = "https://remotive.com/api/remote-jobs"
+REMOTEOK_TAGS = [
+    "sales", "account", "business development", "presales", "customer success",
+    "product", "data", "ai", "machine learning", "cloud",
+]
+ARBEITNOW_TAGS = [
+    "sales", "account", "business development", "presales", "customer success",
+    "product", "data engineer", "machine learning", "ai", "cloud",
+]
+REMOTIVE_CATEGORIES = ["sales", "customer success", "product", "data",
+                       "software development", "machine learning"]
+ARBEITNOW_REMOTE_KEYS = ["Berlin", "Remote", "Hybrid"]
+REMOTIVE_REMOTE_GEO = re.compile(r"(?i)(worldwide|anywhere|remote|czech|poland|germany|spain|portugal|france|sweden|denmark|netherlands|uk|united kingdom|ireland|switzerland|austria|belgium)")
 
 GREENHOUSE_GEO = re.compile(
     r"(?i)\b(netherlands|holland|amsterdam|utrecht|rotterdam|eindhoven|hague|"
@@ -1065,6 +1085,148 @@ def fetch_jobs_ch(delay):
     return jobs
 
 
+# ----------------------------------------------------- Fuentes remote sin key
+
+def _remote_salary(sal_min, sal_max, currency=""):
+    cur = (currency or "USD").upper()
+    if sal_min and sal_max:
+        return f"{cur} {int(sal_min):,} - {int(sal_max):,} per year"
+    if sal_min:
+        return f"from {cur} {int(sal_min):,} per year"
+    return ""
+
+
+def _iso_date(value):
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value / 1000 if value > 10_000_000_000 else value,
+                                          tz=timezone.utc).strftime("%Y-%m-%d")
+        except Exception:
+            return ""
+    s = str(value or "")
+    return s[:10]
+
+
+def fetch_remoteok(delay):
+    data = get_json(REMOTEOK_URL, label="RemoteOk", timeout=40)
+    if not isinstance(data, list) or len(data) < 2:
+        log(f"RemoteOk: respuesta inesperada ({type(data).__name__})")
+        return []
+    jobs, kept = [], 0
+    for item in data[1:]:
+        title = item.get("position") or ""
+        loc = item.get("location") or "Remote"
+        tags = " ".join(item.get("tags") or [])
+        hay = f"{title} {tags} {loc}".lower()
+        if not any(t in hay for t in REMOTEOK_TAGS):
+            continue
+        if not _geo_relevant(loc):
+            continue
+        kept += 1
+        sal_min, sal_max = item.get("salary_min"), item.get("salary_max")
+        content = f"{title} {tags} {item.get('description') or ''}"
+        jobs.append({
+            "id": f"remoteok-{item.get('id') or (item.get('slug') or '')}",
+            "title": title,
+            "company": item.get("company") or "",
+            "location": loc,
+            "description": trunc(strip_html(content)),
+            "summary": " · ".join(filter(None, [title, "RemoteOk", loc])),
+            "source": "remoteok",
+            "posted": (item.get("date") or "")[:10],
+            "url": item.get("url") or item.get("apply_url") or "",
+            "salary_raw": _remote_salary(sal_min, sal_max),
+            "salary_min": sal_min,
+            "salary_max": sal_max,
+            "salary_currency": "USD",
+        })
+        time.sleep(delay)
+    log(f"RemoteOk: {len(data) - 1} descargadas -> {kept} relevantes")
+    return jobs
+
+
+def fetch_arbeitnow(delay):
+    data = get_json(ARBEITNOW_URL, label="Arbeitnow", timeout=40)
+    if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        log(f"Arbeitnow: respuesta inesperada ({type(data).__name__})")
+        return []
+    jobs, kept = [], 0
+    for item in data["data"]:
+        title = item.get("title") or ""
+        loc = item.get("location") or ""
+        tags = " ".join(item.get("tags") or [])
+        hay = f"{title} {tags} {loc} {item.get('job_types') or ''}".lower()
+        if not any(t in hay for t in ARBEITNOW_TAGS):
+            continue
+        if not _geo_relevant(f"{loc} {item.get('remote') or ''}"):
+            continue
+        kept += 1
+        content = f"{title} {tags} {item.get('description') or ''}"
+        jobs.append({
+            "id": f"arbeitnow-{item.get('slug') or ''}",
+            "title": f"{title} ({loc})",
+            "company": item.get("company_name") or "",
+            "location": loc,
+            "description": trunc(strip_html(content)),
+            "summary": " · ".join(filter(None, [title, item.get("company_name") or "", loc])),
+            "source": "arbeitnow",
+            "posted": _iso_date(item.get("created_at")),
+            "url": item.get("url") or "",
+            "salary_raw": "",
+            "salary_min": None,
+            "salary_max": None,
+            "salary_currency": "EUR",
+        })
+        time.sleep(delay)
+    log(f"Arbeitnow: {len(data.get('data'))} descargadas -> {kept} relevantes")
+    return jobs
+
+
+def fetch_remotive(delay):
+    jobs, kept = [], 0
+    page = 0
+    while len(jobs) < 200 and page < 6:
+        data = get_json(f"{REMOTIVE_URL}?limit=100&page={page}",
+                        label=f"Remotive p{page}", timeout=40)
+        if not isinstance(data, dict) or not isinstance(data.get("jobs"), list):
+            break
+        page_items = data["jobs"]
+        if not page_items:
+            break
+        for item in page_items:
+            title = item.get("title") or ""
+            cat = item.get("category") or ""
+            tags = " ".join(item.get("tags") or [])
+            loc = item.get("candidate_required_location") or "Remote"
+            hay = f"{title} {cat} {tags}".lower()
+            if not any(t in hay for t in REMOTIVE_CATEGORIES):
+                continue
+            if not (_geo_relevant(loc) or REMOTIVE_REMOTE_GEO.search(loc or "")):
+                continue
+            kept += 1
+            content = f"{title} {cat} {tags} {item.get('description') or ''}"
+            salary = item.get("salary") or ""
+            jobs.append({
+                "id": f"remotive-{item.get('id')}",
+                "title": title,
+                "company": item.get("company_name") or "",
+                "location": loc,
+                "description": trunc(strip_html(content)),
+                "summary": " · ".join(filter(None, [title, cat, loc])),
+                "source": "remotive",
+                "posted": (item.get("publication_date") or "")[:10],
+                "url": item.get("url") or "",
+                "salary_raw": salary or "",
+                "salary_min": None,
+                "salary_max": None,
+                "salary_currency": "",
+            })
+            time.sleep(delay)
+        page += 1
+    log(f"Remotive: {len(jobs) + 0} -> {kept} relevantes")
+    return jobs
+
+
 # ---------------------------------------------------------------- Google Jobs
 
 def fetch_google_jobs(delay):
@@ -1320,7 +1482,7 @@ def fetch_apple_jobs(delay):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sources",
-                    default="adzuna,greenhouse,ashby,workday,smartrecruiters,lever,epso,jooble,careerjet,nvb,jobindex,wttj,swissdevjobs,amazon,microsoft,meta,apple",
+                    default="adzuna,greenhouse,ashby,workday,smartrecruiters,lever,epso,jooble,nvb,jobindex,wttj,swissdevjobs,amazon,microsoft,meta,apple,remoteok,arbeitnow,remotive",
                     help="fuentes separadas por coma")
     ap.add_argument("--delay", type=float, default=0.3,
                     help="segundos entre peticiones")
@@ -1364,6 +1526,12 @@ def main():
         all_jobs += fetch_swissdevjobs(args.delay)
     if "jobsch" in sources:
         all_jobs += fetch_jobs_ch(args.delay)
+    if "remoteok" in sources:
+        all_jobs += fetch_remoteok(args.delay)
+    if "arbeitnow" in sources:
+        all_jobs += fetch_arbeitnow(args.delay)
+    if "remotive" in sources:
+        all_jobs += fetch_remotive(args.delay)
     if "google" in sources:
         all_jobs += fetch_google_jobs(args.delay)
     if "amazon" in sources:

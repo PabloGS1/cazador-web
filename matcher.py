@@ -392,48 +392,64 @@ def _hard_rejects(feat, profile):
         if pat.lower() in title:
             return True, f"anti-identity: {pat}"
 
-    # 2. Language required that user doesn't speak
-    if feat["lang_req"]:
-        user_langs = set(profile.get("hard_reject", {}).get("languages_spoken", []))
-        req_langs = set(l.strip() for l in feat["lang_req"].split(",") if l.strip())
-        if not req_langs & user_langs:
-            return True, f"lang required: {feat['lang_req']}"
-
-    # 3. Years experience > max
-    max_yrs = hr.get("max_years_experience", 6)
-    if feat["years_min"] > max_yrs:
-        return True, f"years_min {feat['years_min']} > {max_yrs}"
-
-    # 4. Restricted location
+    # 2. Restricted location
     for pat in hr.get("restricted_locations", []):
         if pat.lower() in text:
             return True, f"restricted location: {pat}"
 
-    # 5. Forbidden certifications (mandatory)
+    # 3. Forbidden certifications (mandatory)
     for cert in hr.get("forbidden_certs", []):
         if cert.lower() in text:
             return True, f"forbidden cert: {cert}"
 
-    # 6. Hands-on production ownership
+    # 4. Hands-on production ownership
     for pat in hr.get("production_patterns", []):
         if pat.lower() in text:
             return True, f"production ownership: {pat}"
 
-    # 7. Established network in specific market
+    # 5. Established network in specific market
     for pat in hr.get("established_network_patterns", []):
         if pat.lower() in text:
             return True, f"network required: {pat}"
 
-    # 8. Language not in user's spoken languages
+    # 6. Language not in user's spoken languages
     if feat["lang"] != "en":
         return True, f"not english: {feat['lang']}"
 
     return False, ""
 
 
+def _language_cap(feat, profile):
+    """Techo de score si el puesto exige un idioma que el usuario no habla
+    con fluidez. No descarta: limita para que nunca llegue a match >= 60."""
+    lang_req = feat.get("lang_req") or ""
+    if not lang_req:
+        return None
+    spoken = set(profile.get("hard_reject", {}).get("languages_spoken", []))
+    req_langs = set(l.strip() for l in lang_req.split(",") if l.strip())
+    if req_langs & spoken:
+        return None
+    return 45  # language barrier -> por debajo de 60
+
+
+def _seniority_years_cap(feat, profile):
+    """Techo de score según años mínimos pedidos. >9 años nunca llega a 60."""
+    yrs = feat.get("years_min") or 0
+    if yrs >= 13:
+        return 35
+    if yrs >= 10:
+        return 50
+    if yrs >= 9:
+        return 55
+    if yrs >= 8:
+        return 70
+    return None
+
+
 def score(feat, profile):
     """New formula: 100 × role_weight × geo_weight × (0.5 + 0.5 × domain_overlap) × seniority_fit
-    Hard rejects → score = 0 before formula. Role not in A/B/C → score = 0."""
+    Hard rejects → score = 0 before formula. Role not in A/B/C → score = 0.
+    Idiomas no hablados y años >9 limitan el max (nunca llegan a 60)."""
     title = feat["title_lower"]
     text = feat["text_lower"]
 
@@ -456,6 +472,17 @@ def score(feat, profile):
     match = 100 * role_w * geo_w * domain_mod * sen_fit
     match = max(0, min(90, round(match)))
 
+    # --- Techo por idiomas / años ---
+    caps = []
+    lang_cap = _language_cap(feat, profile)
+    years_cap = _seniority_years_cap(feat, profile)
+    if lang_cap is not None:
+        caps.append(lang_cap)
+        match = min(match, lang_cap)
+    if years_cap is not None:
+        caps.append(years_cap)
+        match = min(match, years_cap)
+
     # --- Build reasons ---
     reasons = []
     reasons.append(role_label)
@@ -467,6 +494,10 @@ def score(feat, profile):
         reasons.append(f"domain {domain_ov:.0%}")
     if sen_fit < 1.0:
         reasons.append(f"seniority ×{sen_fit}")
+    if lang_cap is not None:
+        reasons.append(f"idioma req cap {lang_cap}")
+    if years_cap is not None:
+        reasons.append(f"años cap {years_cap}")
 
     return match, role_label, "; ".join(reasons)
 

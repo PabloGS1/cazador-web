@@ -2,8 +2,7 @@
 """Genera worker/src/defaultProfile.ts desde profile.yaml.
 
 El perfil por defecto es el de Pablo (profile.yaml), la referencia del producto.
-Se usa para crear el perfil de cada usuario nuevo y para saber que los scores
-precalculados de la tabla jobs (match/role_family/why) le corresponden.
+Se usa para crear el perfil de cada usuario nuevo y para puntuar server-side.
 """
 import json
 import yaml
@@ -14,14 +13,20 @@ YAML_PATH = BASE.parent / "profile.yaml"
 OUT = BASE / "src" / "defaultProfile.ts"
 
 cfg = yaml.safe_load(YAML_PATH.read_text(encoding="utf-8"))
-sen = {k: cfg["seniority"][k] for k in ("bonus", "penalty")}
+
+skills = cfg["skills_keywords"]["keywords"]
+if skills and isinstance(skills[0], list):
+    skills = [kw for grp in skills for kw in grp]
+
 profile = {
-    "target_roles": cfg["target_roles"],
-    "domain_keywords": {"keywords": cfg["domain_keywords"]["keywords"]},
-    "skills_keywords": cfg["skills_from_cv"]["keywords"],
-    "location_scoring": cfg["location_prefs"]["scoring"],
-    "seniority": sen,
-    "spoken_languages": cfg.get("spoken_languages", ["english"]),
+    "role_taxonomy": cfg["role_taxonomy"],
+    "anti_identity": cfg["anti_identity"],
+    "hard_reject": cfg["hard_reject"],
+    "geography": cfg["geography"],
+    "domain_keywords": cfg["domain_keywords"],
+    "skills_keywords": {"weight": cfg["skills_keywords"].get("weight", 1), "keywords": skills},
+    "seniority": cfg["seniority"],
+    "spoken_languages": cfg["hard_reject"]["languages_spoken"],
     "min_match": 40,
     "max_match": 200,
 }
@@ -29,11 +34,30 @@ profile = {
 js = (
     "// GENERADO por make_default_profile.py desde profile.yaml - no editar a mano.\n"
     "export interface DefaultProfile {\n"
-    "  target_roles: Record<string, { label: string; weight: number; keywords: string[] }>;\n"
-    "  domain_keywords: { keywords: string[][] };\n"
-    "  skills_keywords: string[];\n"
-    "  location_scoring: Record<string, number>;\n"
-    "  seniority: { bonus: string[]; penalty: string[] };\n"
+    "  role_taxonomy: {\n"
+    "    tier_a: { weight: number; label: string; titles: string[] };\n"
+    "    tier_b: { weight: number; label: string; titles: string[] };\n"
+    "    tier_c: { weight: number; label: string; titles: string[] };\n"
+    "  };\n"
+    "  anti_identity: { reject_title_patterns: string[] };\n"
+    "  hard_reject: {\n"
+    "    languages_forbidden: string[];\n"
+    "    languages_spoken: string[];\n"
+    "    max_years_experience: number;\n"
+    "    restricted_locations: string[];\n"
+    "    forbidden_certs: string[];\n"
+    "    production_patterns: string[];\n"
+    "    established_network_patterns: string[];\n"
+    "  };\n"
+    "  geography: { weight: number; scoring: Record<string, number> };\n"
+    "  domain_keywords: { weight: number; keywords: string[][] };\n"
+    "  skills_keywords: { weight: number; keywords: string[] };\n"
+    "  seniority: {\n"
+    "    bonus: string[];\n"
+    "    penalty: string[];\n"
+    "    director_penalty: number;\n"
+    "    junior_penalty: number;\n"
+    "  };\n"
     "  spoken_languages: string[];\n"
     "  min_match: number;\n"
     "  max_match: number;\n"

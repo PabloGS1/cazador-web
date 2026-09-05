@@ -1,6 +1,7 @@
 // Port 1:1 de matcher.score() (matcher.py) a TypeScript para el Worker.
-// Fórmula nueva: 100 × role_weight × geo_weight × (0.5 + 0.5 × domain_overlap) × seniority_fit
+// Fórmula: 100 × role_weight × geo_weight × (0.5 + 0.5 × domain_overlap) × seniority_fit
 // Hard rejects → score = 0 antes de la fórmula.
+// Idiomas no hablados y años mínimos altos limitan el máximo (nunca llegan a 60).
 
 export interface Profile {
   role_taxonomy: {
@@ -133,43 +134,48 @@ function hardRejects(job: JobRow, profile: Profile): [boolean, string] {
     if (title.includes(pat)) return [true, `anti-identity: ${pat}`];
   }
 
-  // 2. Language required that user doesn't speak
-  if (job.lang_req) {
-    const userLangs = new Set(hr.languages_spoken);
-    const reqLangs = new Set(job.lang_req.split(",").map(l => l.trim()).filter(Boolean));
-    const hasLang = [...reqLangs].some(l => userLangs.has(l));
-    if (!hasLang) return [true, `lang required: ${job.lang_req}`];
-  }
-
-  // 3. Years experience > max
-  if (job.years_min > hr.max_years_experience) {
-    return [true, `years_min ${job.years_min} > ${hr.max_years_experience}`];
-  }
-
-  // 4. Restricted location
+  // 2. Restricted location
   for (const pat of hr.restricted_locations) {
     if (text.includes(pat)) return [true, `restricted location: ${pat}`];
   }
 
-  // 5. Forbidden certifications
+  // 3. Forbidden certifications (mandatory)
   for (const cert of hr.forbidden_certs) {
-    if (text.includes(cert)) return [true, `forbidden cert: ${cert}`];
+    if (text.includes(cert.toLowerCase())) return [true, `forbidden cert: ${cert}`];
   }
 
-  // 6. Hands-on production ownership
+  // 4. Hands-on production ownership
   for (const pat of hr.production_patterns) {
     if (text.includes(pat)) return [true, `production ownership: ${pat}`];
   }
 
-  // 7. Established network in specific market
+  // 5. Established network in specific market
   for (const pat of hr.established_network_patterns) {
     if (text.includes(pat)) return [true, `network required: ${pat}`];
   }
 
-  // 8. Language not english
+  // 6. Language not english
   if (job.lang !== "en") return [true, `not english: ${job.lang}`];
 
   return [false, ""];
+}
+
+function languageCap(job: JobRow, profile: Profile): number | null {
+  const langReq = job.lang_req || "";
+  if (!langReq) return null;
+  const userLangs = new Set(profile.hard_reject.languages_spoken);
+  const reqLangs = langReq.split(",").map(l => l.trim()).filter(Boolean);
+  if (reqLangs.some(l => userLangs.has(l))) return null;
+  return 45; // language barrier -> por debajo de 60
+}
+
+function yearsCap(job: JobRow): number | null {
+  const yrs = job.years_min || 0;
+  if (yrs >= 13) return 35;
+  if (yrs >= 10) return 50;
+  if (yrs >= 9) return 55;
+  if (yrs >= 8) return 70;
+  return null;
 }
 
 export function scoreJob(job: JobRow, profile: Profile): Scored {
@@ -193,6 +199,19 @@ export function scoreJob(job: JobRow, profile: Profile): Scored {
   let match = Math.round(100 * roleW * geoW * domainMod * senFit);
   match = Math.max(0, Math.min(90, match));
 
+  // --- Techo por idiomas / años ---
+  const caps: number[] = [];
+  const langCap = languageCap(job, profile);
+  const yrsCap = yearsCap(job);
+  if (langCap !== null) {
+    caps.push(langCap);
+    match = Math.min(match, langCap);
+  }
+  if (yrsCap !== null) {
+    caps.push(yrsCap);
+    match = Math.min(match, yrsCap);
+  }
+
   // --- Build reasons ---
   const reasons: string[] = [];
   reasons.push(roleLabel);
@@ -200,6 +219,8 @@ export function scoreJob(job: JobRow, profile: Profile): Scored {
   else if (geoW >= 0.8) reasons.push(`geo ${geoW.toFixed(2)}`);
   if (domainOv > 0) reasons.push(`domain ${Math.round(domainOv * 100)}%`);
   if (senFit < 1.0) reasons.push(`seniority ×${senFit}`);
+  if (langCap !== null) reasons.push(`idioma req cap ${langCap}`);
+  if (yrsCap !== null) reasons.push(`años cap ${yrsCap}`);
 
   return { id: job.id, match, roleFamily: roleLabel, why: reasons.join("; ") };
 }

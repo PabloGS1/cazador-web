@@ -43,22 +43,30 @@ jobs:
         run: python notify.py
 
       - name: Setup Node
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Instalar wrangler
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: npm ci
         working-directory: worker
 
       - name: Generar seed y actualizar D1
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bash upload_d1.sh
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Sin CLOUDFLARE_API_TOKEN: se omite la subida a D1"
+            exit 0
+          fi
+          python make_seed_chunks.py
+          npx wrangler d1 execute cazador --remote --command "DELETE FROM jobs;"
+          for f in seed/chunk-*.sql; do
+            echo ">> ${f}"
+            npx wrangler d1 execute cazador --remote --file="${f}"
+          done
+          echo "D1 actualizado OK"
         working-directory: worker
 
       - name: Commit de datos

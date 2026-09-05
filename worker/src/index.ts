@@ -65,6 +65,8 @@ a{color:var(--accent2);text-decoration:none}a:hover{text-decoration:underline}
 .filters select,.filters input{background:var(--card2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;outline:none}
 .filters select:focus,.filters input:focus{border-color:var(--accent)}
 .filters input[type=range]{width:120px;padding:0}
+.slider-wrap{display:flex;align-items:center;gap:6px;display:none}
+.slider-wrap label{white-space:nowrap}
 .range-val{font-size:12px;color:var(--accent2);min-width:30px;text-align:center}
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
 .chart-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
@@ -106,99 +108,133 @@ a{color:var(--accent2);text-decoration:none}a:hover{text-decoration:underline}
 <div class="container" id="app"><div class="loader">Loading...<div class="loading-bar"></div></div></div>
 <script>
 var API=location.origin;
-var me=null,stats=null,jobs=[],filtered=[];
-
-
+var me=null,stats=null,jobs=[],total=0,offset=0,PAGE=200;
+var F={q:'',country:'',company:'',source:'',show:'all',minMatch:0,sort:'match'};
+var SOURCES=['adzuna','ashby','greenhouse','lever','workday','swissdevjobs','nvb','beyond','careerjet','jooble','wttj','activejobs'];
 
 function api(p,o){try{return fetch(API+p,Object.assign({credentials:"include"},o||{})).then(function(r){if(r.status===401)return null;return r.json()})}catch(e){return Promise.resolve(null)}}
+
+function buildQuery(off){
+var qs='limit='+PAGE+'&offset='+off+'&sort='+F.sort;
+if(F.show==='all'){qs+='&all=1'}
+else if(F.show==='custom'){qs+='&min='+F.minMatch}
+else{qs+='&min='+parseInt(F.show,10)}
+if(F.q)qs+='&q='+encodeURIComponent(F.q);
+if(F.country)qs+='&country='+encodeURIComponent(F.country);
+if(F.company)qs+='&company='+encodeURIComponent(F.company);
+if(F.source)qs+='&source='+encodeURIComponent(F.source);
+return qs;
+}
 
 function init(){
 api('/api/me').then(function(d){
 if(!d||!d.user){showLogin();return}
 me=d;
-return Promise.all([api('/api/stats'),api('/api/jobs?limit=500')]);
-}).then(function(r){
-if(!r)return;
-stats=r[0];
-var jd=r[1];
-jobs=(jd&&jd.jobs)||[];
-filtered=jobs.slice();
+return api('/api/stats');
+}).then(function(s){
+stats=s||{};
+return api('/api/jobs?'+buildQuery(0)).then(function(r){
+jobs=(r&&r.jobs)||[];total=(r&&r.total)||0;offset=jobs.length;
 render();
+});
 }).catch(function(){showLogin()});
 }
 
 function showLogin(){
-document.getElementById('app').innerHTML='<div class="login-box"><h1>Cazador</h1><p>AI-powered job matching for public sector, enterprise sales & tech roles</p><p style="color:var(--muted);font-size:13px;margin-bottom:24px">128 ofertas pre-evaluadas · Scoring calibrado por perfil</p><a href="'+API+'/auth/github" class="btn btn-primary" style="font-size:16px;padding:14px 40px">Login with GitHub</a></div>';
+document.getElementById('app').innerHTML='<div class="login-box"><h1>Cazador</h1><p>AI-powered job matching for public sector, enterprise sales & tech roles</p><p style="color:var(--muted);font-size:13px;margin-bottom:24px">Scoring calibrado por perfil · Todas las ofertas con match precalculado</p><a href="'+API+'/auth/github" class="btn btn-primary" style="font-size:16px;padding:14px 40px">Login with GitHub</a></div>';
 }
 
 function render(){
 var u=me.user;
 var h='<div class="header"><div class="logo">Cazador</div><div class="user-info"><span>'+u.login+'</span><button class="btn btn-ghost btn-sm" id="btnLogout">Logout</button></div></div>';
 
-if(stats){
+if(stats&&stats.total){
 h+='<div class="kpi-row">';
 h+='<div class="kpi"><div class="num">'+stats.total+'</div><div class="label">Total ofertas</div></div>';
-h+='<div class="kpi green"><div class="num">'+stats.over40+'</div><div class="label">Match >= 40</div></div>';
-h+='<div class="kpi cyan"><div class="num">'+stats.over60+'</div><div class="label">Match >= 60</div></div>';
-h+='<div class="kpi orange"><div class="num">'+stats.over80+'</div><div class="label">Match >= 80</div></div>';
+h+='<div class="kpi green"><div class="num">'+stats.over40+'</div><div class="label">Match &gt;= 40</div></div>';
+h+='<div class="kpi cyan"><div class="num">'+stats.over60+'</div><div class="label">Match &gt;= 60</div></div>';
+h+='<div class="kpi orange"><div class="num">'+stats.over80+'</div><div class="label">Match &gt;= 80</div></div>';
 h+='<div class="kpi"><div class="num">'+stats.avgMatch+'%</div><div class="label">Avg match</div></div>';
 h+='</div>';
 }
 
 if(stats&&stats.byCountry&&stats.byCountry.length){
 h+='<div class="charts-row">';
-h+='<div class="chart-card"><h3>Por pais</h3><div class="bar-chart">';
-var maxC=Math.max.apply(null,stats.byCountry.map(function(c){return c.c}));
-stats.byCountry.forEach(function(c){
-var w=Math.round(c.c/maxC*100);
-h+='<div class="bar-row"><div class="bar-label">'+c.country+'</div><div class="bar bar-blue" style="width:'+w+'%">'+c.c+'</div><div class="bar-count">avg '+c.avg_m+'%</div></div>';
-});
-h+='</div></div>';
-h+='<div class="chart-card"><h3>Por rol</h3><div class="bar-chart">';
-var maxR=Math.max.apply(null,stats.byRole.map(function(r){return r.c}));
-stats.byRole.forEach(function(r){
-var w=Math.round(r.c/maxR*100);
-h+='<div class="bar-row"><div class="bar-label">'+r.role_family+'</div><div class="bar bar-green" style="width:'+w+'%">'+r.c+'</div><div class="bar-count">avg '+r.avg_m+'%</div></div>';
-});
-h+='</div></div>';
+h+=chartHtml('Por pais',stats.byCountry,'bar-blue');
+h+=chartHtml('Por fuente',stats.bySource,'bar-green');
+h+='</div>';
+h+='<div class="charts-row">';
+h+=chartHtml('Por empresa',stats.byCompany,'bar-blue');
+h+=chartHtml('Por rol',stats.byRole,'bar-green');
 h+='</div>';
 }
 
 h+='<div class="filters">';
-h+='<label>Keywords:</label><input type="text" id="fSearch" placeholder="titulo, empresa, rol..." style="width:200px">';
+h+='<label>Buscar:</label><input type="text" id="fSearch" placeholder="titulo, empresa, ubicacion..." style="width:200px">';
 h+='<label>Pais:</label><select id="fCountry"><option value="">Todos</option></select>';
-h+='<label>Match min:</label><input type="range" id="fMatch" min="0" max="90" value="0"><span class="range-val" id="fMatchVal">0</span>';
-h+='<label>Rol:</label><select id="fRole"><option value="">Todos</option></select>';
-h+='<label>Empresa:</label><select id="fCompany"><option value="">Todas</option></select>';
+h+='<label>Empresa:</label><input type="text" id="fCompany" list="companies" placeholder="cualquiera" style="width:150px"><datalist id="companies"></datalist>';
+h+='<label>Fuente:</label><select id="fSource"><option value="">Todas</option></select>';
+h+='<label>Mostrar:</label><select id="fShow"><option value="all">Todas (match libre)</option><option value="40">Solo match &gt;= 40</option><option value="60">Solo match &gt;= 60</option><option value="80">Solo match &gt;= 80</option><option value="custom">Personalizado</option></select>';
+h+='<span id="fMatchWrap" class="slider-wrap"><label>Match min:</label><input type="range" id="fMatch" min="0" max="90" value="40"><span class="range-val" id="fMatchVal">40</span></span>';
 h+='<button class="btn btn-ghost btn-sm" id="btnReset">Limpiar</button>';
 h+='</div>';
 
-h+='<div class="jobs-header"><h2>Ofertas</h2><span id="jobCount">'+filtered.length+' resultados</span></div>';
+h+='<div class="filters" style="margin-top:8px">';
+h+='<label>Ordenar:</label><select id="fSort"><option value="match">Mejor match</option><option value="date">Mas recientes</option><option value="company">Empresa A-Z</option></select>';
+h+='<span style="color:var(--muted);font-size:12px" id="filterNote">Modo "Todas": ignora el umbral del perfil y muestra el conjunto completo de ofertas.</span>';
+h+='</div>';
+
+h+='<div class="jobs-header"><h2>Ofertas</h2><span id="jobCount">'+offset+' de '+total+'</span></div>';
 h+='<div id="jobList">';
 h+=renderJobs();
 h+='</div>';
+h+='<div id="moreWrap" style="text-align:center;padding:16px"></div>';
 
 document.getElementById('app').innerHTML=h;
 bindEvents();
 }
 
+function chartHtml(title,rows,cls){
+if(!rows||!rows.length)return '';
+var max=Math.max.apply(null,rows.map(function(r){return r.c}));
+var h='<div class="chart-card"><h3>'+title+'</h3><div class="bar-chart">';
+rows.forEach(function(r){
+var w=max?Math.round(r.c/max*100):0;
+h+='<div class="bar-row"><div class="bar-label">'+(r.country||r.src||r.company||r.role_family||'')+'</div><div class="bar '+cls+'" style="width:'+w+'%">'+r.c+'</div><div class="bar-count">avg '+(r.avg_m||r.avg_match||'')+'%</div></div>';
+});
+h+='</div></div>';
+return h;
+}
+
 function renderJobs(){
-if(filtered.length===0)return '<div class="empty"><h3>Sin resultados</h3><p>Ajusta los filtros para ver mas ofertas.</p></div>';
+if(jobs.length===0)return '<div class="empty"><h3>Sin resultados</h3><p>Ajusta los filtros para ver mas ofertas.</p></div>';
 var h='';
-filtered.forEach(function(j){
+jobs.forEach(function(j){
+h+=renderJob(j);
+});
+return h;
+}
+
+function renderJob(j){
 var mc=j.match>=70?'high':j.match>=50?'mid':'low';
-h+='<div class="job"><div class="job-top"><div><div class="job-title"><a href="'+(j.url||'#')+'" target="_blank">'+(j.title||'Sin titulo')+'</a></div><div class="job-meta">';
+var h='<div class="job"><div class="job-top"><div><div class="job-title"><a href="'+(j.url||'#')+'" target="_blank">'+(j.title||'Sin titulo')+'</a></div><div class="job-meta">';
 if(j.company)h+='<span>'+j.company+'</span>';
 if(j.location)h+='<span>'+j.location+'</span>';
-if(j.salary)h+='<span>'+j.salary+'</span>';
+if(j.salary_raw)h+='<span>'+j.salary_raw+'</span>';
 if(j.posted)h+='<span>'+j.posted+'</span>';
 h+='<span class="badge badge-role">'+(j.roleFamily||'')+'</span>';
 h+='<span class="badge badge-geo">'+countryOf(j.location)+'</span>';
+h+='<span class="badge badge-star">'+srcOf(j.source)+'</span>';
 h+='</div></div><div class="job-match '+mc+'">'+j.match+'%</div></div>';
 if(j.why)h+='<div class="job-why">'+j.why+'</div>';
 h+='</div>';
-});
 return h;
+}
+
+function srcOf(s){
+if(!s)return'other';
+var i=s.indexOf('-');
+return i>0?s.slice(0,i):s;
 }
 
 function countryOf(loc){
@@ -207,76 +243,128 @@ var l=loc.toLowerCase();
 if(l.match(/netherlands|amsterdam|utrecht|rotterdam|eindhoven/))return'Netherlands';
 if(l.match(/ireland|dublin/))return'Ireland';
 if(l.match(/united kingdom|london|england|uk/))return'UK';
-if(l.match(/germany|berlin|munich|frankfurt/))return'Germany';
+if(l.match(/germany|berlin|munich|frankfurt|hamburg/))return'Germany';
 if(l.match(/united arab|dubai|abu dhabi|uae/))return'UAE';
 if(l.match(/switzerland|zurich|geneva/))return'Switzerland';
+if(l.match(/saudi|riyadh/))return'Saudi Arabia';
+if(l.match(/qatar|doha/))return'Qatar';
 if(l.match(/mexico|cdmx|guadalajara/))return'Mexico';
 if(l.match(/singapore/))return'Singapore';
+if(l.match(/denmark|copenhagen/))return'Denmark';
+if(l.match(/poland|warsaw/))return'Poland';
+if(l.match(/portugal|lisbon/))return'Portugal';
 if(l.match(/sweden|stockholm/))return'Sweden';
+if(l.match(/spain|madrid|barcelona/))return'Spain';
+if(l.match(/france|paris/))return'France';
+if(l.match(/belgium|brussels/))return'Belgium';
+if(l.match(/austria|vienna/))return'Austria';
+if(l.match(/norway|oslo/))return'Norway';
 if(l.match(/remote/))return'Remote';
 return'Other';
 }
 
-function applyFilters(){
-var country=document.getElementById('fCountry').value;
-var minMatch=parseInt(document.getElementById('fMatch').value)||0;
-var role=document.getElementById('fRole').value;
-var company=document.getElementById('fCompany').value;
-var search=(document.getElementById('fSearch').value||'').toLowerCase();
-filtered=jobs.filter(function(j){
-if(country&&countryOf(j.location)!==country)return false;
-if(j.match<minMatch)return false;
-if(role&&(j.roleFamily||'')!==role)return false;
-if(company&&(j.company||'')!==company)return false;
-if(search){
-var hay=((j.title||'')+' '+(j.company||'')+' '+(j.location||'')+' '+(j.roleFamily||'')+' '+(j.why||'')).toLowerCase();
-if(hay.indexOf(search)<0)return false;
-}
-return true;
+function reload(){
+api('/api/jobs?'+buildQuery(0)).then(function(r){
+jobs=(r&&r.jobs)||[];total=(r&&r.total)||0;offset=jobs.length;
+var el=document.getElementById('jobCount');if(el)el.textContent=offset+' de '+total;
+var l=document.getElementById('jobList');if(l)l.innerHTML=renderJobs();
+updateMore();
 });
-document.getElementById('jobCount').textContent=filtered.length+' resultados';
-document.getElementById('jobList').innerHTML=renderJobs();
+}
+
+function loadMore(){
+api('/api/jobs?'+buildQuery(offset)).then(function(r){
+var more=(r&&r.jobs)||[];
+jobs=jobs.concat(more);offset=jobs.length;
+var el=document.getElementById('jobCount');if(el)el.textContent=offset+' de '+total;
+var l=document.getElementById('jobList');if(l)l.insertAdjacentHTML('beforeend',renderJobsFrom(more));
+updateMore();
+});
+}
+
+function renderJobsFrom(list){
+var h='';
+list.forEach(function(j){h+=renderJob(j)});
+return h;
+}
+
+function updateMore(){
+var w=document.getElementById('moreWrap');
+if(!w)return;
+if(offset<total)w.innerHTML='<button class="btn btn-primary" id="btnMore" style="min-width:180px">Cargar mas ('+(total-offset)+')</button>';
+else w.innerHTML='<span style="color:var(--muted);font-size:12px">Has visto todas ('+total+').</span>';
+var b=document.getElementById('btnMore');
+if(b)b.addEventListener('click',loadMore);
+}
+
+function readFilters(){
+F.q=document.getElementById('fSearch').value.trim();
+F.country=document.getElementById('fCountry').value;
+F.company=document.getElementById('fCompany').value.trim();
+F.source=document.getElementById('fSource').value;
+F.show=document.getElementById('fShow').value;
+if(F.show==='custom')F.minMatch=parseInt(document.getElementById('fMatch').value)||0;
+document.getElementById('fMatchWrap').style.display=(F.show==='custom')?'flex':'none';
+var note=document.getElementById('filterNote');
+if(note)note.textContent=(F.show==='all')?'Modo "Todas": ignora el umbral del perfil y muestra el conjunto completo.':'Filtrado por match >= '+(F.show==='custom'?F.minMatch:F.show)+'.';
 }
 
 function populateDropdowns(){
-var countries={};var roles={};var companies={};
-jobs.forEach(function(j){
-var c=countryOf(j.location);countries[c]=(countries[c]||0)+1;
-var r=j.roleFamily||'';if(r)roles[r]=(roles[r]||0)+1;
-var co=j.company||'';if(co)companies[co]=(companies[co]||0)+1;
-});
 var cs=document.getElementById('fCountry');
-Object.keys(countries).sort(function(a,b){return countries[b]-countries[a]}).forEach(function(c){
-var o=document.createElement('option');o.value=c;o.textContent=c;cs.appendChild(o);
+if(stats&&stats.byCountry){
+stats.byCountry.forEach(function(c){
+var o=document.createElement('option');o.value=c.country;o.textContent=c.country+' ('+c.c+')';cs.appendChild(o);
 });
-var rs=document.getElementById('fRole');
-Object.keys(roles).sort(function(a,b){return roles[b]-roles[a]}).forEach(function(r){
-var o=document.createElement('option');o.value=r;o.textContent=r;rs.appendChild(o);
+}
+var cc=document.getElementById('fCompany');
+var dl=document.getElementById('companies');
+if(stats&&stats.byCompany){
+var seen={};
+stats.byCompany.forEach(function(c){
+if(seen[c.company])return;seen[c.company]=1;
+var o=document.createElement('option');o.value=c.company;o.textContent=c.company+' ('+c.c+')';dl.appendChild(o);
 });
-var co=document.getElementById('fCompany');
-Object.keys(companies).sort(function(a,b){return companies[b]-companies[a]}).forEach(function(c){
-var o=document.createElement('option');o.value=c;o.textContent=c+' ('+companies[c]+')';co.appendChild(o);
+}
+var ss=document.getElementById('fSource');
+var seenS={};
+SOURCES.concat(stats.bySource?stats.bySource.map(function(s){return s.src}):[]).forEach(function(s){
+if(!s||seenS[s])return;seenS[s]=1;
+var o=document.createElement('option');o.value=s;o.textContent=s;ss.appendChild(o);
 });
+}
+
+function applyFilters(){
+readFilters();
+reload();
 }
 
 function bindEvents(){
 document.getElementById('fSearch').addEventListener('input',applyFilters);
 document.getElementById('fCountry').addEventListener('change',applyFilters);
+document.getElementById('fCompany').addEventListener('change',applyFilters);
+document.getElementById('fSource').addEventListener('change',applyFilters);
+document.getElementById('fShow').addEventListener('change',function(){
+readFilters();
+document.getElementById('fMatchVal').textContent=document.getElementById('fMatch').value;
+reload();
+});
 document.getElementById('fMatch').addEventListener('input',function(){
 document.getElementById('fMatchVal').textContent=this.value;
-applyFilters();
+if(document.getElementById('fShow').value==='custom'){F.minMatch=parseInt(this.value)||0;reload();}
 });
-document.getElementById('fRole').addEventListener('change',applyFilters);
-document.getElementById('fCompany').addEventListener('change',applyFilters);
+document.getElementById('fSort').addEventListener('change',function(){F.sort=this.value;reload();});
 document.getElementById('btnReset').addEventListener('click',function(){
+F={q:'',country:'',company:'',source:'',show:'all',minMatch:0,sort:'match'};
 document.getElementById('fSearch').value='';
 document.getElementById('fCountry').value='';
+document.getElementById('fCompany').value='';
+document.getElementById('fSource').value='';
+document.getElementById('fShow').value='all';
 document.getElementById('fMatch').value=0;
 document.getElementById('fMatchVal').textContent='0';
-document.getElementById('fRole').value='';
-document.getElementById('fCompany').value='';
-filtered=jobs.slice();
-applyFilters();
+document.getElementById('fSort').value='match';
+document.getElementById('fMatchWrap').style.display='none';
+reload();
 });
 document.getElementById('btnLogout').addEventListener('click',function(){
 api('/auth/logout',{method:'POST'}).then(function(){me=null;showLogin()});
@@ -513,11 +601,42 @@ async function handleProfile(req: Request, env: Env, githubId: number): Promise<
   return json({ ok: true });
 }
 
+const COUNTRY_CASE = `CASE
+       WHEN location LIKE '%Netherlands%' OR location LIKE '%Amsterdam%' OR location LIKE '%Utrecht%' OR location LIKE '%Rotterdam%' THEN 'Netherlands'
+       WHEN location LIKE '%Ireland%' OR location LIKE '%Dublin%' OR location LIKE '%Cork%' THEN 'Ireland'
+       WHEN location LIKE '%United Kingdom%' OR location LIKE '%London%' OR location LIKE '%England%' THEN 'UK'
+       WHEN location LIKE '%Germany%' OR location LIKE '%Berlin%' OR location LIKE '%Munich%' OR location LIKE '%Frankfurt%' OR location LIKE '%Hamburg%' THEN 'Germany'
+       WHEN location LIKE '%United Arab%' OR location LIKE '%Dubai%' OR location LIKE '%Abu Dhabi%' THEN 'UAE'
+       WHEN location LIKE '%Switzerland%' OR location LIKE '%Zurich%' OR location LIKE '%Geneva%' THEN 'Switzerland'
+       WHEN location LIKE '%Saudi%' OR location LIKE '%Riyadh%' THEN 'Saudi Arabia'
+       WHEN location LIKE '%Qatar%' OR location LIKE '%Doha%' THEN 'Qatar'
+       WHEN location LIKE '%Mexico%' OR location LIKE '%CDMX%' OR location LIKE '%Guadalajara%' THEN 'Mexico'
+       WHEN location LIKE '%Singapore%' THEN 'Singapore'
+       WHEN location LIKE '%Denmark%' OR location LIKE '%Copenhagen%' THEN 'Denmark'
+       WHEN location LIKE '%Poland%' OR location LIKE '%Warsaw%' THEN 'Poland'
+       WHEN location LIKE '%Portugal%' OR location LIKE '%Lisbon%' THEN 'Portugal'
+       WHEN location LIKE '%Sweden%' OR location LIKE '%Stockholm%' THEN 'Sweden'
+       WHEN location LIKE '%Spain%' OR location LIKE '%Madrid%' OR location LIKE '%Barcelona%' THEN 'Spain'
+       WHEN location LIKE '%France%' OR location LIKE '%Paris%' THEN 'France'
+       WHEN location LIKE '%Belgium%' OR location LIKE '%Brussels%' THEN 'Belgium'
+       WHEN location LIKE '%Austria%' OR location LIKE '%Vienna%' THEN 'Austria'
+       WHEN location LIKE '%Norway%' OR location LIKE '%Oslo%' THEN 'Norway'
+       WHEN location LIKE '%Remote%' THEN 'Remote'
+       ELSE 'Other'
+     END`;
+
 async function handleJobs(req: Request, env: Env, githubId: number): Promise<Response> {
   const u = new URL(req.url);
-  const min = parseInt(u.searchParams.get("min") || "40", 10) || 40;
-  const max = parseInt(u.searchParams.get("max") || "200", 10) || 200;
-  const limit = Math.min(parseInt(u.searchParams.get("limit") || "200", 10) || 200, 500);
+  const rawMin = u.searchParams.get("min");
+  const rawMax = u.searchParams.get("max");
+  const offset = Math.max(0, parseInt(u.searchParams.get("offset") || "0", 10) || 0);
+  const limit = Math.min(parseInt(u.searchParams.get("limit") || "100", 10) || 100, 200);
+  const company = u.searchParams.get("company")?.trim() || "";
+  const source = u.searchParams.get("source")?.trim() || "";
+  const country = u.searchParams.get("country")?.trim() || "";
+  const q = u.searchParams.get("q")?.trim().toLowerCase() || "";
+  const sort = u.searchParams.get("sort") || "match"; // match|date|company
+  const all = u.searchParams.get("all") === "1";
   const profileId = u.searchParams.get("profile_id");
 
   const user = await env.DB.prepare("SELECT id FROM users WHERE github_id = ?").bind(githubId).first<{ id: number }>();
@@ -532,30 +651,60 @@ async function handleJobs(req: Request, env: Env, githubId: number): Promise<Res
       ).bind(user.id).first<{ role_taxonomy: string; anti_identity: string; hard_reject: string; domain_keywords: string; skills_keywords: string; geography: string; seniority: string; spoken_languages: string; min_match: number; max_match: number; is_default: number }>();
   if (!profileRow) return json({ error: "no profile" }, 400);
 
-  const effectiveMin = Math.max(min, profileRow.min_match);
-  const effectiveMax = Math.min(max, profileRow.max_match);
+  let effectiveMin: number;
+  let effectiveMax: number;
+  if (all) {
+    // Modo "ver todo": umbrales libres, ignora min_match del perfil
+    effectiveMin = 0;
+    effectiveMax = 999;
+  } else {
+    // Si el cliente no pasa min/max usa los del perfil; si los pasa, los respeta
+    effectiveMin = rawMin != null ? (parseInt(rawMin, 10) || 0) : profileRow.min_match;
+    effectiveMax = rawMax != null ? (parseInt(rawMax, 10) || 999) : profileRow.max_match;
+  }
 
   const cols =
     `id, title, company, location, source, url, posted, salary_raw, salary_min_eur, salary_max_eur,
-     lang, lang_req, years_min, eng_title, hard_block, hard_tech, title_lower, text_lower, match, role_family, why`;
+     lang, years_min, match, role_family, why`;
+
+  const where: string[] = ["hard_block = 0 AND hard_tech = 0"];
+  const params: (string | number)[] = [];
+  if (profileRow.is_default) {
+    where.push("match BETWEEN ? AND ?");
+    params.push(effectiveMin, effectiveMax);
+  }
+  if (company) { where.push("lower(company) = lower(?)"); params.push(company); }
+  if (source) { where.push("CASE WHEN source LIKE '%-%' THEN substr(source, 1, instr(source, '-') - 1) ELSE source END = ?"); params.push(source); }
+  if (country) { where.push(`${COUNTRY_CASE} = ?`); params.push(country); }
+  if (q) {
+    where.push("(lower(title_lower) LIKE ? OR lower(company) LIKE ? OR lower(location) LIKE ?)");
+    const like = "%" + q + "%";
+    params.push(like, like, like);
+  }
+
+  const order = sort === "date" ? "ORDER BY posted DESC, match DESC"
+    : sort === "company" ? "ORDER BY company ASC, match DESC"
+    : "ORDER BY match DESC, posted DESC";
 
   if (profileRow.is_default) {
     const rows = await env.DB.prepare(
-      `SELECT ${cols} FROM jobs
-       WHERE hard_block = 0 AND hard_tech = 0 AND match BETWEEN ? AND ?
-       ORDER BY match DESC, posted DESC LIMIT ?`,
-    ).bind(effectiveMin, effectiveMax, limit).all();
+      `SELECT ${cols} FROM jobs WHERE ${where.join(" AND ")} ${order} LIMIT ? OFFSET ?`,
+    ).bind(...params, limit, offset).all();
+    const totalRow = await env.DB.prepare(
+      `SELECT count(*) as c FROM jobs WHERE ${where.join(" AND ")}`,
+    ).bind(...params).first<{ c: number }>();
     const jobs = (rows.results || []).map((r) => {
       const { role_family, ...rest } = r;
       return { ...rest, roleFamily: role_family, why: r.why || "" };
     });
-    return json({ count: jobs.length, jobs });
+    return json({ count: jobs.length, total: totalRow?.c || 0, offset, limit, jobs });
   }
 
-  const profile: Profile = {
+  // Perfil custom: rescoring en memoria sobre el conjunto filtrado
+  const profileCfg: Profile = {
     role_taxonomy: JSON.parse(profileRow.role_taxonomy),
-    anti_identity: JSON.parse(profileRow.anti_identity || '{"reject_title_patterns":[]}'),
-    hard_reject: JSON.parse(profileRow.hard_reject || '{"languages_forbidden":[],"languages_spoken":["english"],"max_years_experience":6,"restricted_locations":[],"forbidden_certs":[],"production_patterns":[],"established_network_patterns":[]}'),
+    anti_identity: JSON.parse(profileRow.anti_identity || "{}"),
+    hard_reject: JSON.parse(profileRow.hard_reject || "{}"),
     domain_keywords: JSON.parse(profileRow.domain_keywords),
     skills_keywords: JSON.parse(profileRow.skills_keywords),
     geography: JSON.parse(profileRow.geography),
@@ -564,18 +713,16 @@ async function handleJobs(req: Request, env: Env, githubId: number): Promise<Res
     min_match: profileRow.min_match,
     max_match: profileRow.max_match,
   };
-
   const rows = await env.DB.prepare(
-    `SELECT ${cols} FROM jobs WHERE hard_block = 0 AND hard_tech = 0`,
-  ).all<JobRow>();
-
-  const results = (rows.results || [])
-    .map((j) => scoreJob(j, profile))
+    `SELECT * FROM jobs WHERE ${where.join(" AND ")}`,
+  ).bind(...params).all<JobRow>();
+  const allScored = (rows.results || [])
+    .map((j) => scoreJob(j, profileCfg))
     .filter((s) => s.match >= effectiveMin && s.match <= effectiveMax)
-    .sort((a, b) => b.match - a.match)
-    .slice(0, limit);
-
-  return json({ count: results.length, jobs: results });
+    .sort((a, b) => b.match - a.match);
+  const total = allScored.length;
+  const page = allScored.slice(offset, offset + limit);
+  return json({ count: page.length, total, offset, limit, jobs: page });
 }
 
 async function handleStats(env: Env): Promise<Response> {
@@ -586,20 +733,14 @@ async function handleStats(env: Env): Promise<Response> {
   const avgMatch = await env.DB.prepare("SELECT round(avg(match)) as a FROM jobs WHERE match >= 40").first<{ a: number }>();
   const byRole = await env.DB.prepare("SELECT role_family, count(*) as c, round(avg(match)) as avg_m FROM jobs WHERE match >= 40 GROUP BY role_family ORDER BY c DESC").all();
   const byCountry = await env.DB.prepare(
-    `SELECT CASE
-       WHEN location LIKE '%Netherlands%' OR location LIKE '%Amsterdam%' THEN 'Netherlands'
-       WHEN location LIKE '%Ireland%' OR location LIKE '%Dublin%' THEN 'Ireland'
-       WHEN location LIKE '%United Kingdom%' OR location LIKE '%London%' THEN 'UK'
-       WHEN location LIKE '%Germany%' OR location LIKE '%Berlin%' OR location LIKE '%Munich%' THEN 'Germany'
-       WHEN location LIKE '%United Arab%' OR location LIKE '%Dubai%' OR location LIKE '%Abu Dhabi%' THEN 'UAE'
-       WHEN location LIKE '%Switzerland%' OR location LIKE '%Zurich%' THEN 'Switzerland'
-       WHEN location LIKE '%Mexico%' OR location LIKE '%CDMX%' THEN 'Mexico'
-       WHEN location LIKE '%Singapore%' THEN 'Singapore'
-       WHEN location LIKE '%Sweden%' OR location LIKE '%Stockholm%' THEN 'Sweden'
-       WHEN location LIKE '%Remote%' THEN 'Remote'
-       ELSE 'Other'
-     END as country, count(*) as c, round(avg(match)) as avg_m
+    `SELECT ${COUNTRY_CASE} as country, count(*) as c, round(avg(match)) as avg_m
      FROM jobs WHERE match >= 40 GROUP BY country ORDER BY c DESC`
+  ).all();
+  const bySource = await env.DB.prepare(
+    "SELECT CASE WHEN source LIKE '%-%' THEN substr(source, 1, instr(source, '-') - 1) ELSE source END AS src, count(*) as c FROM jobs WHERE match >= 40 GROUP BY src ORDER BY c DESC LIMIT 12"
+  ).all();
+  const byCompany = await env.DB.prepare(
+    "SELECT company, count(*) as c, round(avg(match)) as avg_m FROM jobs WHERE match >= 40 GROUP BY company ORDER BY c DESC LIMIT 12"
   ).all();
   const topJobs = await env.DB.prepare("SELECT id, title, company, location, match, role_family, why, url FROM jobs WHERE match >= 60 ORDER BY match DESC LIMIT 10").all();
   return json({
@@ -610,6 +751,8 @@ async function handleStats(env: Env): Promise<Response> {
     avgMatch: avgMatch?.a || 0,
     byRole: byRole.results,
     byCountry: byCountry.results,
+    bySource: bySource.results,
+    byCompany: byCompany.results,
     topJobs: topJobs.results,
   });
 }

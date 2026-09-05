@@ -2,19 +2,27 @@
 """
 CAZADOR SCRAPER — junta ofertas de fuentes públicas sin login.
 
-Fuentes:
-  - Adzuna          (NL / CH / SG)  API con app_id/app_key de secrets.yaml o env
-  - Greenhouse      (boards públicos, sin token) — lista en companies.yaml
-  - Ashby           (posting-api, sin token) — startups de IA, companies.yaml
-  - Workday         (API CXS pública) — grandes empresas, companies.yaml
-  - SmartRecruiters (API pública) — ASML, Renesas, WD, Statkraft, Grab...
-  - Lever           (api.lever.co)  opcional y desactivado por defecto
-                                    (a fecha de hoy responde 404 para casi todo)
+Fuentes activas por defecto:
+  - Adzuna          (NL / CH / SG)  API con app_id/app_key
+  - Greenhouse      (boards públicos) — 49 empresas en companies.yaml
+  - Ashby           (posting-api) — 25 empresas AI/startups en companies.yaml
+  - Workday         (API CXS pública) — 16 empresas en companies.yaml
+  - SmartRecruiters (API pública) — 7 empresas en companies.yaml
+  - Lever           (api.lever.co) — Palantir (limitado a 100/empresa)
+  - EPSO/EU-Careers (feed JSON público) — instituciones de la UE
+  - Jobindex        (RSS público, sin token) — Dinamarca (100 ofertas)
+  - SwissDevJobs    (RSS público) — Suiza (187 ofertas)
+  - Amazon          (search.json API) — global (50 ofertas por query)
+  - Microsoft/Google/Meta/Apple — HTML scraping (0 sin headless browser)
+  - Jooble          (API key necesaria)
+  - Careerjet       (affiliate API)
+  - NVB             (API — 403 anti-bot)
+  - WTTJ            (Algolia API) — Francia
 
 Salida: web/data/raw_jobs.json  (alimenta a matcher.py)
 
 Uso:
-    python scraper.py                     # adzuna + greenhouse + ashby + workday + sr
+    python scraper.py                     # todas las fuentes por defecto
     python scraper.py --sources adzuna    # solo Adzuna
     python scraper.py --delay 0.5         # espera entre peticiones
 """
@@ -82,6 +90,54 @@ ADZUNA_QUERIES_SHORT = [
 # que sí funcionen si quieres reactivarlo (slugs -> nombre).
 LEVER_COMPANIES = {}
 
+# Jooble: API gratuita, key por país (cada dominio necesita su propia key)
+JOOBLE_KEYS = {}  # Rellena en secrets.yaml: jooble: { nl: "key", ch: "key", ... }
+JOOBLE_COUNTRIES = {
+    "nl": ("nl.jooble.org", "Netherlands"),
+    "ch": ("ch.jooble.org", "Switzerland"),
+    "de": ("de.jooble.org", "Germany"),
+    "dk": ("dk.jooble.org", "Denmark"),
+    "ae": ("ae.jooble.org", "UAE"),
+    "sa": ("sa.jooble.org", "Saudi Arabia"),
+    "gb": ("uk.jooble.org", "United Kingdom"),
+}
+JOOBLE_QUERIES = [
+    "sales engineer", "solutions engineer", "presales",
+    "business development", "account executive", "account manager",
+    "key account", "cloud sales", "SaaS",
+    "artificial intelligence", "machine learning",
+    "data center", "technical account manager",
+]
+
+# Careerjet: API de afiliado, ID en secrets.yaml
+CAREERJET_AFFID = ""  # Rellena en secrets.yaml: careerjet_affid: "tu-id"
+CAREERJET_COUNTRIES = {
+    "nl": "nl_NL", "ch": "de_CH", "de": "de_DE",
+    "dk": "da_DK", "ae": "en_AE", "sa": "en_SA",
+    "gb": "en_GB", "ie": "en_IE", "fr": "fr_FR",
+    "es": "es_ES", "mx": "es_MX", "se": "sv_SE",
+    "no": "no_NO", "pl": "pl_PL", "pt": "pt_PT",
+}
+
+# Nationale Vacaturebank: API interna no documentada (funciona sin auth)
+NVB_QUERIES = [
+    "sales engineer", "account manager", "business development",
+    "technical account manager", "key account manager",
+]
+
+# Jobindex.dk: feeds RSS por búsqueda (sin auth)
+JOBINDEX_QUERIES = [
+    "sales engineer", "account manager", "business development",
+    "technical account manager", "key account",
+]
+
+# Welcome to the Jungle: Algolia search (key pública embebida en JS)
+WTTJ_APP_ID = "CSEKHVMS53"
+WTTJ_QUERIES = [
+    "sales engineer", "account executive", "business development",
+    "account manager", "key account", "technical account manager",
+]
+
 GREENHOUSE_GEO = re.compile(
     r"(?i)\b(netherlands|holland|amsterdam|utrecht|rotterdam|eindhoven|hague|"
     r"switzerland|swiss|zurich|zürich|geneva|lausanne|basel|"
@@ -124,7 +180,7 @@ def strip_html(html):
     return text.strip()
 
 
-def trunc(s, n=6000):
+def trunc(s, n=12000):
     return s[:n] if s else ""
 
 
@@ -214,11 +270,23 @@ def fetch_adzuna(secrets, delay):
 def _keyword_sets(profile):
     """Devuelve (keywords_de_rol, keywords_de_dominio) en minúsculas."""
     role_kws = []
-    for fam in profile["target_roles"].values():
-        role_kws += fam["keywords"]
+    # Nuevo schema: role_taxonomy con tiers
+    if "role_taxonomy" in profile:
+        for tier in profile["role_taxonomy"].values():
+            if isinstance(tier, dict):
+                role_kws += tier.get("titles", []) + tier.get("keywords", [])
+    # Schema legacy: target_roles
+    elif "target_roles" in profile:
+        for fam in profile["target_roles"].values():
+            role_kws += fam.get("keywords", [])
     domain_kws = []
-    for group in profile["domain_keywords"]["keywords"]:
-        domain_kws += group
+    dk = profile.get("domain_keywords", {})
+    if isinstance(dk, dict):
+        for group in dk.get("keywords", []):
+            if isinstance(group, list):
+                domain_kws += group
+            elif isinstance(group, str):
+                domain_kws.append(group)
     return [k.lower() for k in role_kws], [k.lower() for k in domain_kws]
 
 
@@ -476,25 +544,82 @@ def fetch_smartrecruiters(delay, profile, companies):
     return jobs
 
 
+
+# -------------------------------------------------------------------- EPSO
+
+# Feed publico de ofertas de las instituciones de la UE (EPSO/EU-Careers).
+# Devuelve JSON sin token ni login. El feed NO trae la descripcion completa,
+# solo metadatos (dominio, grado, contrato, sede, deadline).
+EPSO_URL = "https://epso.europa.eu/JSON-JOBS"
+
+
+def fetch_epso(delay, profile):
+    role_kws, domain_kws = _keyword_sets(profile)
+    keywords = role_kws + domain_kws
+    data = get_json(EPSO_URL, label="EPSO", timeout=40)
+    if not isinstance(data, list):
+        log(f"EPSO: respuesta inesperada ({type(data).__name__})")
+        return []
+    jobs, kept = [], 0
+    for item in data:
+        jid = item.get("ID")
+        if not jid:
+            continue
+        title = item.get("TITLE") or ""
+        company = (item.get("INSTITUTIONS") or "").strip()
+        loc = item.get("LOCATIONS") or ""
+        domain = item.get("DOMAIN") or ""
+        grade = item.get("GRADE") or ""
+        contract = item.get("CONTRACT") or ""
+        content = " ".join(filter(None, [domain, grade, contract]))
+        if not _relevant(title, loc, content, keywords):
+            continue
+        kept += 1
+        jobs.append({
+            "id": f"epso-{jid}",
+            "title": title,
+            "company": company,
+            "location": loc,
+            "description": trunc(content),
+            "summary": " ".join(filter(None,
+                                         [title, company, loc, grade, contract, domain])),
+            "source": "epso",
+            "posted": "",
+            "url": item.get("URI") or "",
+            "salary_raw": "",
+            "salary_min": None,
+            "salary_max": None,
+            "salary_currency": "",
+            "contract": contract,
+            "category": domain,
+            "grade": grade,
+        })
+    log(f"EPSO: {len(data)} publicadas -> {kept} relevantes")
+    return jobs
+
 # ------------------------------------------------------------------- Lever
 
-def fetch_lever(delay):
+def fetch_lever(delay, companies):
     jobs, seen = [], set()
-    for slug, name in LEVER_COMPANIES.items():
+    for slug, name in companies.get("lever", {}).items():
         url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
         try:
-            r = requests.get(url, headers=HEADERS, timeout=30)
+            r = requests.get(url, headers=HEADERS, timeout=120)
             r.raise_for_status()
             data = r.json()
         except Exception as e:
             log(f"Lever {slug}: error {e}")
             time.sleep(delay)
             continue
+        kept = 0
         for item in data:
+            if kept >= CAP_PER_COMPANY:
+                break
             jid = item.get("id")
             if not jid or jid in seen:
                 continue
             seen.add(jid)
+            kept += 1
             jobs.append({
                 "id": f"lever-{slug}-{jid}",
                 "title": item.get("text") or "",
@@ -504,23 +629,698 @@ def fetch_lever(delay):
                                                 item.get("description"))),
                 "summary": " · ".join(filter(None, [item.get("text"), name])),
                 "source": f"lever-{slug}",
-                "posted": (item.get("createdAt") or "")[:10],
+                "posted": (datetime.fromtimestamp(item["createdAt"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d") if item.get("createdAt") else ""),
                 "url": item.get("hostedUrl") or "",
                 "salary_raw": "",
                 "salary_min": None,
                 "salary_max": None,
                 "salary_currency": "",
             })
+        log(f"Lever {slug}: {kept} ofertas")
         time.sleep(delay)
     return jobs
 
 
-# -------------------------------------------------------------------- main
+# --------------------------------------------------------- Jooble (API free)
+
+def fetch_jooble(delay, secrets):
+    jobs = []
+    jooble_keys = secrets.get("jooble", {})
+    for country_code, (domain, country_name) in JOOBLE_COUNTRIES.items():
+        key = jooble_keys.get(country_code)
+        if not key:
+            log(f"Jooble {country_code}: sin key, skip")
+            continue
+        for q in JOOBLE_QUERIES:
+            url = f"https://{domain}/api/{key}"
+            body = {"keywords": q, "location": country_name, "ResultOnPage": 20}
+            try:
+                r = requests.post(url, json=body, headers=HEADERS, timeout=30)
+                r.raise_for_status()
+                data = r.json()
+            except Exception as e:
+                log(f"Jooble {country_code}/{q}: error {e}")
+                time.sleep(delay)
+                continue
+            for item in (data.get("jobs") or []):
+                jid = item.get("id") or item.get("link") or ""
+                if not jid:
+                    continue
+                loc = item.get("location") or ""
+                jobs.append({
+                    "id": f"jooble-{country_code}-{hash(jid) & 0xFFFFFFFF:08x}",
+                    "title": item.get("title") or "",
+                    "company": item.get("company") or "",
+                    "location": loc if loc else country_name,
+                    "description": trunc(item.get("snippet") or item.get("description") or ""),
+                    "summary": " · ".join(filter(None, [item.get("title"), item.get("company")])),
+                    "source": f"jooble-{country_code}",
+                    "posted": (item.get("updated") or "")[:10],
+                    "url": item.get("link") or "",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "",
+                })
+            time.sleep(delay)
+    log(f"Jooble: {len(jobs)} ofertas")
+    return jobs
+
+
+# ------------------------------------------------------- Careerjet (API free)
+
+def fetch_careerjet(delay, secrets):
+    jobs = []
+    affid = secrets.get("careerjet_affid") or CAREERJET_AFFID
+    if not affid:
+        log("Careerjet: sin affidavit ID, skip")
+        return jobs
+    for country_code, locale in CAREERJET_COUNTRIES.items():
+        for q in ADZUNA_QUERIES:
+            params = {
+                "keywords": q,
+                "locale_code": locale,
+                "results_on_page": 20,
+                "sort": "date",
+            }
+            try:
+                r = requests.get(
+                    "https://search.api.careerjet.net/v4/query",
+                    params=params,
+                    auth=(affid, ""),
+                    headers=HEADERS,
+                    timeout=30,
+                )
+                r.raise_for_status()
+                data = r.json()
+            except Exception as e:
+                log(f"Careerjet {country_code}/{q}: error {e}")
+                time.sleep(delay)
+                continue
+            for item in (data.get("jobs") or []):
+                if not item:
+                    continue
+                jobs.append({
+                    "id": f"careerjet-{country_code}-{item.get('jobReference','')}",
+                    "title": item.get("title") or "",
+                    "company": item.get("company") or "",
+                    "location": item.get("locations") or item.get("reference") or "",
+                    "description": trunc(item.get("description_text") or item.get("description") or ""),
+                    "summary": " · ".join(filter(None, [item.get("title"), item.get("company")])),
+                    "source": f"careerjet-{country_code}",
+                    "posted": (item.get("date") or "")[:10],
+                    "url": item.get("url") or "",
+                    "salary_raw": item.get("salary") or "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "",
+                })
+            time.sleep(delay)
+    log(f"Careerjet: {len(jobs)} ofertas")
+    return jobs
+
+
+# ------------------------------------------- Nationale Vacaturebank (API interna)
+
+def fetch_nationale_vacaturebank(delay):
+    jobs = []
+    nvb_headers = dict(HEADERS)
+    nvb_headers["Accept"] = "application/json"
+    nvb_headers["Referer"] = "https://www.nationalevacaturebank.nl/"
+    nvb_headers["Origin"] = "https://www.nationalevacaturebank.nl"
+    for q in NVB_QUERIES:
+        page = 1
+        while page <= 5:
+            params = {"q": q, "page": page, "pageSize": 50, "sortBy": "date"}
+            url = "https://api.nationalevacaturebank.nl/search/jobs"
+            try:
+                r = requests.get(url, params=params, headers=nvb_headers, timeout=30)
+                if r.status_code == 404 or r.status_code == 403:
+                    break
+                r.raise_for_status()
+                data = r.json()
+            except Exception as e:
+                log(f"NVB/{q}: error {e}")
+                break
+            items = data.get("jobs") or data.get("results") or []
+            if not items:
+                break
+            for item in items:
+                jid = item.get("id") or item.get("url") or ""
+                if not jid:
+                    continue
+                jobs.append({
+                    "id": f"nvb-{hash(str(jid)) & 0xFFFFFFFF:08x}",
+                    "title": item.get("title") or item.get("name") or "",
+                    "company": item.get("companyName") or item.get("company") or "",
+                    "location": item.get("city") or item.get("location") or "",
+                    "description": trunc(item.get("description") or item.get("content") or ""),
+                    "summary": " · ".join(filter(None, [item.get("title"), item.get("companyName")])),
+                    "source": "nvb-nl",
+                    "posted": (item.get("publishDate") or item.get("date") or "")[:10],
+                    "url": item.get("url") or item.get("applyUrl") or "",
+                    "salary_raw": item.get("salary") or "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "",
+                })
+            page += 1
+            time.sleep(delay)
+    log(f"NVB: {len(jobs)} ofertas")
+    return jobs
+
+
+# ------------------------------------------------- Jobindex.dk (RSS feeds)
+
+def fetch_jobindex_rss(delay):
+    import xml.etree.ElementTree as ET
+    jobs = []
+    for q in JOBINDEX_QUERIES:
+        rss_url = f"https://www.jobindex.dk/jobsoegning?q={requests.utils.quote(q)}&format=rss"
+        try:
+            r = requests.get(rss_url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                continue
+            root = ET.fromstring(r.content)
+        except Exception as e:
+            log(f"Jobindex/{q}: error {e}")
+            time.sleep(delay)
+            continue
+        for item in root.iter("item"):
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            desc = (item.findtext("description") or "").strip()
+            pub = (item.findtext("pubDate") or "")[:10]
+            if not title or not link:
+                continue
+            jobs.append({
+                "id": f"jobindex-{hash(link) & 0xFFFFFFFF:08x}",
+                "title": title,
+                "company": "",
+                "location": "",
+                "description": trunc(desc),
+                "summary": title,
+                "source": "jobindex-dk",
+                "posted": pub,
+                "url": link,
+                "salary_raw": "",
+                "salary_min": None,
+                "salary_max": None,
+                "salary_currency": "",
+            })
+        time.sleep(delay)
+    log(f"Jobindex: {len(jobs)} ofertas")
+    return jobs
+
+
+# --------------------------------------- Welcome to the Jungle (Algolia search)
+
+def fetch_wttj(delay, secrets):
+    jobs = []
+    algolia_key = secrets.get("wttj_algolia_key") or ""
+    if not algolia_key:
+        log("WTTJ: sin Algolia key, skip (añade wttj_algolia_key en secrets.yaml)")
+        return jobs
+    headers = dict(HEADERS)
+    headers["x-algolia-application-id"] = WTTJ_APP_ID
+    headers["x-algolia-api-key"] = algolia_key
+    for q in WTTJ_QUERIES:
+        body = {
+            "requests": [{
+                "indexName": "wk_cms_jobs_production",
+                "params": f"query={requests.utils.quote(q)}&hitsPerPage=50&page=0",
+            }]
+        }
+        try:
+            r = requests.post(
+                f"https://{WTTJ_APP_ID.lower()}-dsn.algolia.net/1/indexes/*/queries",
+                json=body, headers=headers, timeout=30,
+            )
+            r.raise_for_status()
+            results = r.json().get("results", [{}])[0]
+        except Exception as e:
+            log(f"WTTJ/{q}: error {e}")
+            time.sleep(delay)
+            continue
+        for hit in results.get("hits", []):
+            jid = hit.get("objectID") or ""
+            if not jid:
+                continue
+            offices = hit.get("offices") or []
+            loc = offices[0].get("city") or "" if offices else ""
+            sal = hit.get("salary_min")
+            sal_max = hit.get("salary_max")
+            currency = hit.get("salary_currency") or "EUR"
+            jobs.append({
+                "id": f"wttj-{jid}",
+                "title": hit.get("name") or "",
+                "company": (hit.get("organization") or {}).get("name") or "",
+                "location": loc,
+                "description": trunc(hit.get("description") or hit.get("description_html") or ""),
+                "summary": " · ".join(filter(None, [hit.get("name"), (hit.get("organization") or {}).get("name")])),
+                "source": "wttj",
+                "posted": (hit.get("published_at") or "")[:10],
+                "url": f"https://www.welcometothejungle.com/fr/jobs/{jid}" if jid else "",
+                "salary_raw": "",
+                "salary_min": sal if sal else None,
+                "salary_max": sal_max if sal_max else None,
+                "salary_currency": currency,
+            })
+        time.sleep(delay)
+    log(f"WTTJ: {len(jobs)} ofertas")
+    return jobs
+
+
+# ------------------------------------------------------------------ Bayt (UAE/SA)
+
+def fetch_bayt(delay):
+    jobs, seen = [], set()
+    queries = ["sales engineer", "account executive", "business development",
+               "solutions consultant", "technical account manager", "pre-sales"]
+    for q in queries:
+        for page in range(1, 6):
+            url = f"https://www.bayt.com/en/international/jobs/{q.replace(' ', '-')}-jobs/?page={page}"
+            try:
+                r = requests.get(url, headers=HEADERS, timeout=30)
+                if r.status_code != 200:
+                    break
+                # Extract job cards from HTML (bayt embeds JSON-LD)
+                import re as _re
+                for m in _re.finditer(r'"@type"\s*:\s*"JobPosting".*?"title"\s*:\s*"([^"]+)".*?"url"\s*:\s*"([^"]+)".*?"datePosted"\s*:\s*"([^"]*)"', r.text):
+                    title, jurl, posted = m.group(1), m.group(2), m.group(3)[:10]
+                    jid = jurl.rstrip("/").split("/")[-1]
+                    if jid in seen:
+                        continue
+                    seen.add(jid)
+                    jobs.append({
+                        "id": f"bayt-{jid}",
+                        "title": title,
+                        "company": "",
+                        "location": "",
+                        "description": "",
+                        "summary": title,
+                        "source": "bayt",
+                        "posted": posted,
+                        "url": jurl if jurl.startswith("http") else f"https://www.bayt.com{jurl}",
+                        "salary_raw": "",
+                        "salary_min": None,
+                        "salary_max": None,
+                        "salary_currency": "",
+                    })
+            except Exception as e:
+                log(f"Bayt/{q}: error {e}")
+            time.sleep(delay)
+    log(f"Bayt: {len(jobs)} ofertas")
+    return jobs
+
+
+# --------------------------------------------------------------- GulfTalent
+
+def fetch_gulftalent(delay):
+    jobs, seen = [], set()
+    queries = ["sales engineer", "account executive", "business development",
+               "solutions consultant", "pre-sales"]
+    for q in queries:
+        url = f"https://www.gulftalent.com/jobs/search?q={q.replace(' ', '+')}"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                continue
+            import re as _re
+            for m in _re.finditer(r'<a[^>]*href="(/jobs/[^"]+)"[^>]*>([^<]+)</a>', r.text):
+                jpath, title = m.group(1), m.group(2).strip()
+                jid = jpath.rstrip("/").split("/")[-1]
+                if jid in seen:
+                    continue
+                seen.add(jid)
+                jobs.append({
+                    "id": f"gt-{jid}",
+                    "title": title,
+                    "company": "",
+                    "location": "",
+                    "description": "",
+                    "summary": title,
+                    "source": "gulftalent",
+                    "posted": "",
+                    "url": f"https://www.gulftalent.com{jpath}",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "",
+                })
+        except Exception as e:
+            log(f"GulfTalent/{q}: error {e}")
+        time.sleep(delay)
+    log(f"GulfTalent: {len(jobs)} ofertas")
+    return jobs
+
+
+# ----------------------------------------------------------- SwissDevJobs.ch
+
+def fetch_swissdevjobs(delay):
+    jobs, seen = [], set()
+    url = "https://www.swissdevjobs.ch/rss"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=30)
+        if r.status_code != 200:
+            log(f"SwissDevJobs: HTTP {r.status_code}")
+            return jobs
+        import re as _re
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(r.text)
+        for item in root.iter("item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            title = title_el.text if title_el is not None else ""
+            link = link_el.text if link_el is not None else ""
+            if not link or link in seen:
+                continue
+            seen.add(link)
+            jid = link.rstrip("/").split("/")[-1].split("?")[0]
+            if not jid:
+                continue
+            # Extract salary from title if present: [CHF 85'000 - 115'000]
+            sal_m = _re.search(r"\[([^\]]+)\]", title or "")
+            sal_raw = sal_m.group(1) if sal_m else ""
+            clean_title = _re.sub(r"\s*@\s*.*$", "", title or "")
+            jobs.append({
+                "id": f"swdev-{jid}",
+                "title": clean_title,
+                "company": "",
+                "location": "Switzerland",
+                "description": "",
+                "summary": title,
+                "source": "swissdevjobs",
+                "posted": "",
+                "url": link,
+                "salary_raw": sal_raw,
+                "salary_min": None,
+                "salary_max": None,
+                "salary_currency": "CHF",
+            })
+    except Exception as e:
+        log(f"SwissDevJobs: error {e}")
+    log(f"SwissDevJobs: {len(jobs)} ofertas")
+    return jobs
+
+
+# -------------------------------------------------------------- jobs.ch
+
+def fetch_jobs_ch(delay):
+    jobs, seen = [], set()
+    queries = ["sales+engineer", "account+executive", "business+development",
+               "solutions+consultant", "presales"]
+    for q in queries:
+        url = f"https://www.jobs.ch/en/vacancies/?q={q}&limit=50"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                continue
+            import re as _re
+            for m in _re.finditer(r'"@type"\s*:\s*"JobPosting".*?"title"\s*:\s*"([^"]+)".*?"url"\s*:\s*"([^"]+)".*?"datePosted"\s*:\s*"([^"]*)"', r.text):
+                title, jurl, posted = m.group(1), m.group(2), m.group(3)[:10]
+                jid = jurl.rstrip("/").split("/")[-1]
+                if jid in seen:
+                    continue
+                seen.add(jid)
+                jobs.append({
+                    "id": f"jobsch-{jid}",
+                    "title": title,
+                    "company": "",
+                    "location": "Switzerland",
+                    "description": "",
+                    "summary": title,
+                    "source": "jobsch",
+                    "posted": posted,
+                    "url": jurl if jurl.startswith("http") else f"https://www.jobs.ch{jurl}",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "CHF",
+                })
+        except Exception as e:
+            log(f"jobs.ch/{q}: error {e}")
+        time.sleep(delay)
+    log(f"jobs.ch: {len(jobs)} ofertas")
+    return jobs
+
+
+# ---------------------------------------------------------------- Google Jobs
+
+def fetch_google_jobs(delay):
+    jobs, seen = [], set()
+    queries = ["sales+engineer", "account+executive", "business+development",
+               "solutions+consultant", "technical+account+manager"]
+    for q in queries:
+        url = f"https://careers.google.com/jobs/results/?q={q}&hl=en&gl=us&num=50"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                continue
+            import re as _re
+            # Google embeds structured data as JSON-LD
+            for m in _re.finditer(r'"@type"\s*:\s*"JobPosting".*?"title"\s*:\s*"([^"]+)".*?"url"\s*:\s*"([^"]+)".*?"datePosted"\s*:\s*"([^"]*)"', r.text):
+                title, jurl, posted = m.group(1), m.group(2), m.group(3)[:10]
+                jid = jurl.rstrip("/").split("/")[-1]
+                if jid in seen:
+                    continue
+                seen.add(jid)
+                jobs.append({
+                    "id": f"google-{jid}",
+                    "title": title,
+                    "company": "Google",
+                    "location": "",
+                    "description": "",
+                    "summary": title,
+                    "source": "google",
+                    "posted": posted,
+                    "url": jurl if jurl.startswith("http") else f"https://careers.google.com{jurl}",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "USD",
+                })
+        except Exception as e:
+            log(f"Google/{q}: error {e}")
+        time.sleep(delay)
+    log(f"Google: {len(jobs)} ofertas")
+    return jobs
+
+
+# --------------------------------------------------------------- Amazon Jobs
+
+def fetch_amazon_jobs(delay):
+    jobs, seen = [], set()
+    queries = ["sales+engineer", "account+executive", "business+development",
+               "solutions+consultant", "technical+account+manager"]
+    for q in queries:
+        url = f"https://www.amazon.jobs/en/search.json?q={q}&offset=0&result_limit=50&sort=recent"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            r.raise_for_status()
+            data = r.json()
+            for item in data.get("jobs", []):
+                jid = item.get("id_icims") or str(item.get("id", ""))
+                title = item.get("title", "")
+                if not jid or jid in seen:
+                    continue
+                seen.add(jid)
+                loc = item.get("location", "")
+                posted = (item.get("posted_date") or "")[:10]
+                team = item.get("team", "")
+                if isinstance(team, dict):
+                    team = team.get("name", str(team))
+                jobs.append({
+                    "id": f"amazon-{jid}",
+                    "title": title,
+                    "company": "Amazon",
+                    "location": loc,
+                    "description": trunc(item.get("description", "")),
+                    "summary": " · ".join(filter(None, [title, str(team)])),
+                    "source": "amazon",
+                    "posted": posted,
+                    "url": f"https://www.amazon.jobs{item.get('job_path', '')}",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "USD",
+                })
+        except Exception as e:
+            log(f"Amazon/{q}: error {e}")
+        time.sleep(delay)
+    log(f"Amazon: {len(jobs)} ofertas")
+    return jobs
+
+
+# ------------------------------------------------------------- Microsoft Jobs
+
+def fetch_microsoft_jobs(delay):
+    jobs, seen = [], set()
+    queries = ["sales+engineer", "account+executive", "business+development",
+               "solutions+consultant", "technical+account+manager"]
+    for q in queries:
+        url = f"https://jobs.careers.microsoft.com/global/en/search?q={q}&pg=1&pgSz=50&o=Recent"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                continue
+            import re as _re
+            # Microsoft/Eightfold renders client-side; try to find any embedded job data
+            # Pattern: look for job-like URLs in href attributes
+            for m in _re.finditer(r'href="(/global/en/job/\d+/[^"]+)"', r.text):
+                jpath = m.group(1)
+                jid = jpath.split("/job/")[1].split("/")[0] if "/job/" in jpath else ""
+                title = ""
+                # Try to get title from nearby text
+                title_m = _re.search(r'title="([^"]+)"', r.text[max(0, m.start()-200):m.end()+200])
+                if title_m:
+                    title = title_m.group(1)
+                if not jid or jid in seen:
+                    continue
+                seen.add(jid)
+                jobs.append({
+                    "id": f"ms-{jid}",
+                    "title": title or f"Microsoft Job {jid}",
+                    "company": "Microsoft",
+                    "location": "",
+                    "description": "",
+                    "summary": title or f"Microsoft Job {jid}",
+                    "source": "microsoft",
+                    "posted": "",
+                    "url": f"https://jobs.careers.microsoft.com{jpath}",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "USD",
+                })
+        except Exception as e:
+            log(f"Microsoft/{q}: error {e}")
+        time.sleep(delay)
+    log(f"Microsoft: {len(jobs)} ofertas")
+    return jobs
+
+
+# ----------------------------------------------------------------- Meta Jobs
+
+def fetch_meta_jobs(delay):
+    jobs, seen = [], set()
+    queries = ["sales+engineer", "account+executive", "business+development",
+               "solutions+consultant", "technical+account+manager"]
+    for q in queries:
+        url = f"https://www.metacareers.com/jobs?q={q}&limit=50"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                continue
+            import re as _re
+            for m in _re.finditer(r'href="(/careers/jobs/[^"]+)"', r.text):
+                jpath = m.group(1)
+                jid = jpath.split("/")[-1]
+                if not jid or jid in seen:
+                    continue
+                seen.add(jid)
+                title_m = _re.search(r'title="([^"]+)"', r.text[max(0, m.start()-300):m.end()+300])
+                title = title_m.group(1) if title_m else f"Meta Job {jid}"
+                jobs.append({
+                    "id": f"meta-{jid}",
+                    "title": title,
+                    "company": "Meta",
+                    "location": "",
+                    "description": "",
+                    "summary": title,
+                    "source": "meta",
+                    "posted": "",
+                    "url": f"https://www.metacareers.com{jpath}",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "USD",
+                })
+        except Exception as e:
+            log(f"Meta/{q}: error {e}")
+        time.sleep(delay)
+    log(f"Meta: {len(jobs)} ofertas")
+    return jobs
+
+
+# ----------------------------------------------------------------- Apple Jobs
+
+def fetch_apple_jobs(delay):
+    jobs, seen = [], set()
+    queries = ["sales+engineer", "account+executive", "business+development",
+               "solutions+consultant", "technical+account+manager"]
+    for q in queries:
+        # Apple jobs API
+        url = f"https://jobs.apple.com/api/role/search?q={q}&limit=50&page=1"
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code != 200:
+                # Try alternate HTML scraping
+                url2 = f"https://jobs.apple.com/en-us/search?search={q.replace('+', ' ')}"
+                r = requests.get(url2, headers=HEADERS, timeout=30)
+                if r.status_code != 200:
+                    continue
+                import re as _re
+                for m in _re.finditer(r'href="(/en-us/details/[^"]+)"', r.text):
+                    jpath = m.group(1)
+                    jid = jpath.split("/")[-1]
+                    if not jid or jid in seen:
+                        continue
+                    seen.add(jid)
+                    title_m = _re.search(r'title="([^"]+)"', r.text[max(0, m.start()-200):m.end()+200])
+                    title = title_m.group(1) if title_m else f"Apple Job {jid}"
+                    jobs.append({
+                        "id": f"apple-{jid}",
+                        "title": title,
+                        "company": "Apple",
+                        "location": "",
+                        "description": "",
+                        "summary": title,
+                        "source": "apple",
+                        "posted": "",
+                        "url": f"https://jobs.apple.com{jpath}",
+                        "salary_raw": "",
+                        "salary_min": None,
+                        "salary_max": None,
+                        "salary_currency": "USD",
+                    })
+                continue
+            data = r.json()
+            for item in data.get("data", {}).get("rolesByStatics", {}).get("roleList", []):
+                jid = item.get("id", "")
+                title = item.get("name", "")
+                if not jid or str(jid) in seen:
+                    continue
+                seen.add(str(jid))
+                loc = ", ".join(item.get("location", [])) if isinstance(item.get("location"), list) else str(item.get("location", ""))
+                jobs.append({
+                    "id": f"apple-{jid}",
+                    "title": title,
+                    "company": "Apple",
+                    "location": loc,
+                    "description": trunc(item.get("description", "")),
+                    "summary": title,
+                    "source": "apple",
+                    "posted": (item.get("datePosted") or "")[:10],
+                    "url": f"https://jobs.apple.com/en-us/details/{jid}" if jid else "",
+                    "salary_raw": "",
+                    "salary_min": None,
+                    "salary_max": None,
+                    "salary_currency": "USD",
+                })
+        except Exception as e:
+            log(f"Apple/{q}: error {e}")
+        time.sleep(delay)
+    log(f"Apple: {len(jobs)} ofertas")
+    return jobs
+
+
+# ----------------------------------------------------------- main
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sources",
-                    default="adzuna,greenhouse,ashby,workday,smartrecruiters",
+                    default="adzuna,greenhouse,ashby,workday,smartrecruiters,lever,epso,jooble,careerjet,nvb,jobindex,wttj,swissdevjobs,amazon,microsoft,meta,apple",
                     help="fuentes separadas por coma")
     ap.add_argument("--delay", type=float, default=0.3,
                     help="segundos entre peticiones")
@@ -542,8 +1342,38 @@ def main():
         all_jobs += fetch_workday(args.delay, profile, companies)
     if "smartrecruiters" in sources:
         all_jobs += fetch_smartrecruiters(args.delay, profile, companies)
+    if "epso" in sources:
+        all_jobs += fetch_epso(args.delay, profile)
     if "lever" in sources:
-        all_jobs += fetch_lever(args.delay)
+        all_jobs += fetch_lever(args.delay, companies)
+    if "jooble" in sources:
+        all_jobs += fetch_jooble(args.delay, secrets)
+    if "careerjet" in sources:
+        all_jobs += fetch_careerjet(args.delay, secrets)
+    if "nvb" in sources:
+        all_jobs += fetch_nationale_vacaturebank(args.delay)
+    if "jobindex" in sources:
+        all_jobs += fetch_jobindex_rss(args.delay)
+    if "wttj" in sources:
+        all_jobs += fetch_wttj(args.delay, secrets)
+    if "bayt" in sources:
+        all_jobs += fetch_bayt(args.delay)
+    if "gulftalent" in sources:
+        all_jobs += fetch_gulftalent(args.delay)
+    if "swissdevjobs" in sources:
+        all_jobs += fetch_swissdevjobs(args.delay)
+    if "jobsch" in sources:
+        all_jobs += fetch_jobs_ch(args.delay)
+    if "google" in sources:
+        all_jobs += fetch_google_jobs(args.delay)
+    if "amazon" in sources:
+        all_jobs += fetch_amazon_jobs(args.delay)
+    if "microsoft" in sources:
+        all_jobs += fetch_microsoft_jobs(args.delay)
+    if "meta" in sources:
+        all_jobs += fetch_meta_jobs(args.delay)
+    if "apple" in sources:
+        all_jobs += fetch_apple_jobs(args.delay)
 
     by_source = {}
     for j in all_jobs:

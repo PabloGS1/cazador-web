@@ -1,0 +1,19 @@
+name = "cazador-api"
+main = "src/index.ts"
+compatibility_date = "2025-07-18"
+workers_dev = true
+account_id = "1b71cc269185484ecf35344d0c8432e2"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cazador"
+database_id = "123f302f-995b-4eb6-b672-d61babd78f06"
+
+[vars]
+APP_ORIGIN = "https://cazador-api.pablo-garciasalguero.workers.dev"
+GITHUB_REDIRECT_URI = "https://cazador-api.pablo-garciasalguero.workers.dev/auth/callback"
+
+# Secretos (wrangler secret put):
+#   GITHUB_CLIENT_ID
+#   GITHUB_CLIENT_SECRET
+#   SESSION_SECRET

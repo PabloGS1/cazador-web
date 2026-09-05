@@ -20,6 +20,7 @@ import yaml
 BASE = Path(__file__).parent
 RAW = BASE / "web" / "data" / "raw_jobs.json"
 OUT = BASE / "web" / "data" / "jobs.json"
+FEATURES = BASE / "web" / "data" / "features.json"
 
 
 def load_profile():
@@ -44,22 +45,26 @@ def _match_any(text, kws):
 
 
 def _score_role(title_text, text, profile):
-    """Keyword de rol en el TÍTULO = peso completo; solo en la descripción
-    se puntúa con menos (el título manda en ofertas de venta)."""
-    for fam, cfg in profile["target_roles"].items():
-        if _match_any(title_text, cfg["keywords"]):
-            return cfg["weight"], cfg["label"], fam
-    for fam, cfg in profile["target_roles"].items():
-        if _match_any(text, cfg["keywords"]):
-            return max(0, cfg["weight"] - 20), cfg["label"], fam
-    return (0, "", "")
+    """Tier-based role taxonomy: match title against A/B/C tiers.
+    Returns (weight, tier_label, 0) or (0, "", 0) if no match."""
+    tax = profile.get("role_taxonomy", {})
+    # Tier A first (direct match)
+    tier_a = tax.get("tier_a", {})
+    for t in tier_a.get("titles", []):
+        if t.lower() in title_text:
+            return tier_a.get("weight", 1.0), tier_a.get("label", "Target directo")
+    # Tier B
+    tier_b = tax.get("tier_b", {})
+    for t in tier_b.get("titles", []):
+        if t.lower() in title_text:
+            return tier_b.get("weight", 0.6), tier_b.get("label", "Encaje parcial")
+    # Tier C (data centre / AI infra)
+    tier_c = tax.get("tier_c", {})
+    for t in tier_c.get("titles", []):
+        if t.lower() in title_text:
+            return tier_c.get("weight", 0.4), tier_c.get("label", "DC/AI infra")
+    return 0, ""
 
-
-def _role_keywords(profile):
-    kws = []
-    for fam in profile["target_roles"].values():
-        kws += fam["keywords"]
-    return [k.lower() for k in kws]
 
 
 # Títulos claramente de ingeniería/no-venta: bajan el match aunque la
@@ -91,40 +96,57 @@ TECH_ROLE_KEYWORDS = [
     "product engineer", "product owner", "product manager", "product specialist",
     "sales consultant", "technical consultant", "solutions advisor",
 ]
+# Roles tecnicos DUROS que el usuario descarta explicitamente (no es ingeniero:
+# su rol es ventas tecnico). MLOps/AIOps, programar con PyTorch, ML/DL engineering...
+HARD_TECH = re.compile(
+    r"\b(mlops|ml-?ops|aiops|ai-?ops|pytorch|tensorflow|keras|cuda|torchvision|ml engineer|machine learning engineer|deep learning engineer|llm engineer|computer vision engineer|model training|ml researcher|machine learning researcher|deep learning researcher|llm researcher|ai researcher|applied ai researcher|research engineer|applied scientist|post training)\b", re.I)
 YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:-|–|to)?\s*\d{0,2}\s*years?\b", re.I)
 
 
-def _count_domain(text, profile):
-    hits = 0
-    for group in profile["domain_keywords"]["keywords"]:
-        if _match_any(text, group):
-            hits += 1
-    return hits
+def _domain_overlap(text, profile):
+    """Returns overlap fraction (0-1): fraction of domain keyword groups matched."""
+    groups = profile.get("domain_keywords", {}).get("keywords", [])
+    if not groups:
+        return 0.0
+    hits = sum(1 for group in groups if _match_any(text, group))
+    return hits / len(groups)
 
 
 def _score_skills(text, profile):
-    hits = sum(1 for k in profile["skills_from_cv"]["keywords"]
-               if k.lower() in text)
+    kws = profile.get("skills_keywords", {}).get("keywords", [])
+    hits = sum(1 for k in kws if k.lower() in text)
     return hits
 
 
 def _score_location(job, profile):
+    """Geography weight from profile.yaml geo scoring. Default 0.3 for unmatched."""
     loc = (job.get("location") or "").lower()
-    # también mira país del portal (fuente)
     src = (job.get("source") or "").lower()
     blob = f"{loc} {src}"
-    best = 0
-    for kw, w in profile["location_prefs"]["scoring"].items():
+    geo = profile.get("geography", {}).get("scoring", {})
+    best = 0.3  # default for remote/unmatched
+    for kw, w in geo.items():
         if kw.lower() in blob:
             best = max(best, w)
     return best
 
 
-def _seniority_delta(text, profile):
-    cfg = profile["seniority"]
-    bonus = sum(1 for k in cfg["bonus"] if k in text)
-    penalty = sum(1 for k in cfg["penalty"] if k in text)
-    return min(bonus, 3) - min(penalty, 2)
+def _seniority_fit(text, profile):
+    """Returns multiplier: 1.0 mid/senior IC, 0.3 director+, 0.0 junior/intern."""
+    cfg = profile.get("seniority", {})
+    # Check junior/intern first → 0.0
+    for k in cfg.get("penalty", []):
+        if k.lower() in text:
+            # director/VP gets 0.3, others get 0.0
+            if k.lower() in ("director", "vp", "vice president"):
+                return cfg.get("director_penalty", 0.3)
+            return cfg.get("junior_penalty", 0.0)
+    # Check senior/lead/manager → 1.0
+    for k in cfg.get("bonus", []):
+        if k.lower() in text:
+            return 1.0
+    # Default: mid-level IC → 1.0
+    return 1.0
 
 
 # ---------------------------------------------------------------- salario
@@ -310,10 +332,151 @@ def detect_local_lang(text):
 
 # ------------------------------------------------------------------ main
 
+# ------------------------------------------------------- features + score
+
+# Features por oferta: todo lo independiente del perfil se calcula UNA vez por
+# scrape y se guarda en web/data/features.json. score() reutiliza esas features
+# para puntuar contra CUALQUIER perfil (multi-usuario) sin re-scrapear.
+# OJO: el texto de matching va COMPLETO (un cap a 3000 chars cambiaba el score
+# de ~1/4 de las ofertas y movia el umbral 40). features.json pesa mas pero el
+# resultado es identico al pipeline anterior.
+
+
+def build_features(raw_jobs):
+    feats = []
+    for j in raw_jobs:
+        title = (j.get("title") or "").lower()
+        text = _text_of(j)
+        sal_min_eur, sal_max_eur, sal_raw = _structured_salary(j)
+        if not sal_min_eur:
+            sal_min_eur, sal_max_eur, sal_raw = detect_salary(text)
+        feat = {
+            "id": j.get("id"),
+            "title": j.get("title") or "",
+            "company": j.get("company") or "",
+            "location": j.get("location") or "",
+            "source": j.get("source") or "",
+            "url": j.get("url") or "",
+            "posted": j.get("posted") or "",
+            "summary": j.get("summary") or "",
+            "description": j.get("description") or "",
+            "title_lower": title,
+            "text_lower": text,
+            "salary_min_eur": sal_min_eur,
+            "salary_max_eur": sal_max_eur,
+            "salary_raw": sal_raw,
+            "lang": detect_language((j.get("description") or "")[:2500]),
+            "lang_req": detect_local_lang(text),
+            "years_min": _years_min(text),
+            "eng_title": bool(ENGINEERING_ONLY.search(title)),
+            "hard_block": bool(HARD_BLOCK.search(title)),
+            "hard_tech": bool(HARD_TECH.search(title)),
+        }
+        # campos extra de ciertas fuentes (Adzuna/EPSO) se conservan tal cual
+        for k in ("contract", "category", "grade", "salary_currency"):
+            if k in j:
+                feat[k] = j[k]
+        feats.append(feat)
+    return feats
+
+
+def _hard_rejects(feat, profile):
+    """Check all hard reject conditions. Returns (reject: bool, reason: str)."""
+    text = feat["text_lower"]
+    title = feat["title_lower"]
+    hr = profile.get("hard_reject", {})
+    ai = profile.get("anti_identity", {})
+
+    # 1. Anti-identity: reject title patterns (ML engineer, SDR, etc.)
+    for pat in ai.get("reject_title_patterns", []):
+        if pat.lower() in title:
+            return True, f"anti-identity: {pat}"
+
+    # 2. Language required that user doesn't speak
+    if feat["lang_req"]:
+        user_langs = set(profile.get("hard_reject", {}).get("languages_spoken", []))
+        req_langs = set(l.strip() for l in feat["lang_req"].split(",") if l.strip())
+        if not req_langs & user_langs:
+            return True, f"lang required: {feat['lang_req']}"
+
+    # 3. Years experience > max
+    max_yrs = hr.get("max_years_experience", 6)
+    if feat["years_min"] > max_yrs:
+        return True, f"years_min {feat['years_min']} > {max_yrs}"
+
+    # 4. Restricted location
+    for pat in hr.get("restricted_locations", []):
+        if pat.lower() in text:
+            return True, f"restricted location: {pat}"
+
+    # 5. Forbidden certifications (mandatory)
+    for cert in hr.get("forbidden_certs", []):
+        if cert.lower() in text:
+            return True, f"forbidden cert: {cert}"
+
+    # 6. Hands-on production ownership
+    for pat in hr.get("production_patterns", []):
+        if pat.lower() in text:
+            return True, f"production ownership: {pat}"
+
+    # 7. Established network in specific market
+    for pat in hr.get("established_network_patterns", []):
+        if pat.lower() in text:
+            return True, f"network required: {pat}"
+
+    # 8. Language not in user's spoken languages
+    if feat["lang"] != "en":
+        return True, f"not english: {feat['lang']}"
+
+    return False, ""
+
+
+def score(feat, profile):
+    """New formula: 100 × role_weight × geo_weight × (0.5 + 0.5 × domain_overlap) × seniority_fit
+    Hard rejects → score = 0 before formula. Role not in A/B/C → score = 0."""
+    title = feat["title_lower"]
+    text = feat["text_lower"]
+
+    # --- Hard rejects → 0 ---
+    rejected, rej_reason = _hard_rejects(feat, profile)
+    if rejected:
+        return 0, "REJECTED", rej_reason
+
+    # --- Role taxonomy filter ---
+    role_w, role_label = _score_role(title, text, profile)
+    if role_w == 0:
+        return 0, "no role match", "title not in tier A/B/C"
+
+    # --- Formula ---
+    geo_w = _score_location(feat, profile)
+    domain_ov = _domain_overlap(text, profile)
+    domain_mod = 0.5 + 0.5 * domain_ov
+    sen_fit = _seniority_fit(text, profile)
+
+    match = 100 * role_w * geo_w * domain_mod * sen_fit
+    match = max(0, min(90, round(match)))
+
+    # --- Build reasons ---
+    reasons = []
+    reasons.append(role_label)
+    if geo_w < 0.3:
+        reasons.append(f"geo {geo_w:.2f}")
+    elif geo_w >= 0.8:
+        reasons.append(f"geo {geo_w:.2f}")
+    if domain_ov > 0:
+        reasons.append(f"domain {domain_ov:.0%}")
+    if sen_fit < 1.0:
+        reasons.append(f"seniority ×{sen_fit}")
+
+    return match, role_label, "; ".join(reasons)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min", type=int, default=40)
     ap.add_argument("--max", type=int, default=200)
+    ap.add_argument("--rebuild-features", action="store_true",
+                    help="regenera features.json aunque ya exista")
     args = ap.parse_args()
 
     if not RAW.exists():
@@ -321,81 +484,34 @@ def main():
     data = json.loads(RAW.read_text(encoding="utf-8"))
     jobs = data.get("jobs", []) if isinstance(data, dict) else data
     profile = load_profile()
-    role_keywords = _role_keywords(profile)
+
+    features = build_features(jobs)
+    FEATURES.parent.mkdir(parents=True, exist_ok=True)
+    FEATURES.write_text(json.dumps({"generated": datetime.now().isoformat(),
+                                    "count": len(features), "jobs": features},
+                                   ensure_ascii=False, indent=1),
+                        encoding="utf-8")
 
     out = []
-    for j in jobs:
-        title = (j.get("title") or "").lower()
-        text = _text_of(j)
-        role_w, role_label, role_fam = _score_role(title, text, profile)
-        domain_hits = _count_domain(text, profile)
-        domain_w = min(domain_hits, 3) * 8
-        skills_w = min(_score_skills(text, profile), 4) * 2
-        loc_w = _score_location(j, profile)
-        sen = _seniority_delta(text, profile)
-
-        match = role_w + domain_w + skills_w + loc_w
-        match = max(0, min(90, match))
-        if sen < 0:
-            match = max(0, match - 4)
-        if ENGINEERING_ONLY.search(title) and not _match_any(title, role_keywords):
-            match = max(0, match - 40)
-        if HARD_BLOCK.search(title):
-            match = max(0, match - 60)
-        # años de experiencia exigidos en roles técnico-comerciales
-        if role_fam and role_fam in ("sales_engineering", "product_engineer", "key_account"):
-            y = _years_min(text)
-            if y >= 9:
-                match = max(0, match - 10)
-            elif y >= 6:
-                match = max(0, match - 6)
-
-        sal_min_eur, sal_max_eur, sal_raw = _structured_salary(j)
-        if not sal_min_eur:
-            sal_min_eur, sal_max_eur, sal_raw = detect_salary(text)
-        if sal_min_eur and sal_min_eur < 30000:
-            match = max(0, match - 5)
-
-        # idioma: solo ofertas en inglés (local = buscan gente local)
-        lang = detect_language((j.get("description") or "")[:2500])
-        j["lang"] = lang
-        if lang != "en":
-            match = max(0, match - 30)
-
-        # idioma local exigido pese a estar en inglés (p.ej. "Dutch fluency")
-        lang_req = detect_local_lang(text)
-        j["lang_req"] = lang_req
-        if lang_req:
-            match = max(0, match - 30)
-
+    for feat in features:
+        match, role_label, why = score(feat, profile)
         if match < args.min or match > args.max:
             continue
-
-        reasons = []
-        if role_label:
-            reasons.append(role_label)
-        if domain_hits:
-            reasons.append(f"{domain_hits} dominios IA/Data")
-        if skills_w:
-            reasons.append("skills CV")
-        if lang_req:
-            reasons.append(f"requiere {lang_req}")
-
+        j = dict(feat)
         j["match"] = match
         j["role_family"] = role_label or "otro"
-        j["why"] = "; ".join(reasons)
-        j["salary"] = sal_raw or ""
-        j["salary_eur"] = sal_min_eur
-        j["salary_max_eur"] = sal_max_eur
+        j["why"] = why
+        j["salary"] = feat["salary_raw"] or ""
+        j["salary_eur"] = feat["salary_min_eur"]
+        j["salary_max_eur"] = feat["salary_max_eur"]
         j["summary"] = " · ".join(filter(None, [
-            j.get("title"),
-            j.get("company"),
-            j.get("location"),
-            sal_raw or "",
-            j.get("source"),
-        ]))
+            feat["title"], feat["company"], feat["location"],
+            feat["salary_raw"] or "", feat["source"]]))
         slim = dict(j)
-        slim["description"] = (j.get("description") or "")[:500]
+        slim["description"] = (feat["description"] or "")[:500]
+        for k in ("title_lower", "text_lower", "eng_title", "hard_block",
+                  "hard_tech", "years_min"):
+            slim.pop(k, None)
         out.append(slim)
 
     out.sort(key=lambda x: (-x["match"], x.get("posted", "")), reverse=False)

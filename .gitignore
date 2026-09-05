@@ -8,3 +8,12 @@ __pycache__/
 
 # Datos intermedios: raw se regenera en cada run
 web/data/raw_jobs.json
+# Features (independiente del perfil) - grande, se regenera en cada matcher
+web/data/features.json
+
+# Worker
+worker/node_modules/
+worker/.wrangler/
+worker/seed.sql
+worker/seed/
+worker/.dev.vars

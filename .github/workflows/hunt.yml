@@ -11,7 +11,7 @@ permissions:
 jobs:
   hunt:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +41,25 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
         run: python notify.py
+
+      - name: Setup Node
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar wrangler
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: npm ci
+        working-directory: worker
+
+      - name: Generar seed y actualizar D1
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash upload_d1.sh
+        working-directory: worker
 
       - name: Commit de datos
         run: |

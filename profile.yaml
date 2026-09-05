@@ -1,147 +1,364 @@
-# PERFIL DE MATCH — derivado del CV de Pablo García-Salguero (LinkedIn + CV)
-# Usado por matcher.py para puntuar cada oferta (0-100, tope 90).
-# Perfil: AI & Big Data Sales (sector público), MBA, CFA L1. Exp. IoT/SaaS/Data Centers.
-# Roles objetivo: Sales/Solutions Engineer, Presales/Consultor técnico, BDM, KAM.
-# Regla del usuario: nada "extremadamente demandante" (5+ años / muchas certs) salvo BD.
+# =============================================================================
+# PERFIL DE SCORING — Pablo García-Salguero
+# =============================================================================
+# Fórmula: score = 100 × role_weight × geo_weight × (0.5 + 0.5 × domain) × seniority_fit
+# El dominio MODULA, no decide. El rol FILTRA primero.
 
-target_roles:
-  # Familia -> palabras que disparan un match fuerte en el título
-  "sales_engineering":
-    label: "Sales / Solutions Engineer"
-    weight: 36
-    keywords: ["sales engineer", "solutions engineer", "solution engineer", "presales",
-               "pre-sales", "pre sales", "technical sales", "solutions consultant",
-               "value engineer", "solutions architect", "technical account", "field engineer",
-               "sales consultant", "technical consultant", "pre-sales engineer",
-               "solutions advisor", "presales consultant", "sales architect"]
-  "ai_data_sales":
-    label: "IA / Data Sales"
-    weight: 36
-    keywords: ["ai sales", "data sales", "business development", "bdm", "b2b sales",
-               "account executive", "account manager", "key account", "hunter",
-               "sales manager", "sales executive", "seller",
-               "sales area manager", "account director", "area sales manager"]
-  "key_account":
-    label: "Key Account Manager"
-    weight: 34
-    keywords: ["key account manager", "kam", "key account", "strategic account",
-               "global account", "major accounts", "named account"]
-  "product_engineer":
-    label: "Product / Pre-sales"
-    weight: 32
-    keywords: ["product engineer", "product owner", "product manager", "technical product",
-               "product specialist", "solutions architect", "pre-sales consultant",
-               "presales consultant", "sales consultant"]
-  "bdm":
-    label: "Business Development"
-    weight: 34
-    keywords: ["business development manager", "business development", "bdm",
-               "partnerships manager", "alliances", "channel manager", "partner manager",
-               "go-to-market", "gtm manager", "new business"]
+# ---------------------------------------------------------------------------
+# 1. IDENTITY — quién soy (para matching semántico)
+# ---------------------------------------------------------------------------
+identity: |
+  Commercial technology professional with five years of full-cycle enterprise
+  B2B sales in AI, data platforms and IT infrastructure. I sell: I own quota,
+  pipeline, negotiation and close. I am not an engineer and I do not build or
+  operate production systems for customers.
 
-domain_keywords:
-  # Dominio que suma al match: IA, Big Data, Cloud, IoT, DC, sector público
-  weight: 25
-  keywords:
-    - ["artificial intelligence", "inteligencia artificial", "genai", "generative ai", "llm", "machine learning", "deep learning", "rag", "rag", "vector", "ai agents", "agentic", "agentica", "agents", " ai "]
-    - ["big data", "data engineer", "data scientist", "data analyst", "data platform", "databricks", "snowflake", "spark", "hadoop", "etl", "data warehouse", "data lake"]
-    - ["data center", "datacenter", "data centre", "colocation", "hyperscale", "gpu", "hpc", "compute", "it infrastructure", "infrastructure", "ai infrastructure", "ai operations", "nvidia"]
-    - ["cloud", "aws", "azure", "gcp", "kubernetes", "saas", "paas", "iaas"]
-    - ["iot", "smart city", "smart cities", "connectivity", "telecom", "smart grid"]
-    - ["openai", "anthropic", "gemini", "gpt", "copilot", "agent", "chatbot", "virtual assistant", "automation", "generative", "rpa"]
-    - ["public sector", "government", "public administration", "public services", "citizen", "citizens", "tender", "tenders", "procurement", "public procurement", "licitación", "administración pública", "ayuntamiento", "public"]
+  My work sits between sales, pre-sales and product: I run technical discovery
+  with IT and engineering stakeholders, define reference architectures together
+  with product and engineering teams, design pilots and proofs of concept, build
+  the business case and TCO model, and close the contract. I am technically
+  literate — I write Python, I ship my own software, I hold NVIDIA AI
+  Infrastructure certification — but my accountability is revenue, not delivery.
 
-skills_from_cv:
-  # Competencias del CV que suman al match si aparecen en la oferta
-  weight: 15
-  keywords: ["salesforce", "power bi", "sql", "rfp", "rfi", "proof of concept", "poc",
-             "presales", "pre-sales", "pipeline", "kpi", "stakeholder", "consultative",
-             "negotiation", "contract", "public sector", "government", "smart",
-             "cloud", "saas", "sap", "n8n", "business case", "go-to-market", "gtm",
-             "cold call", "cold outreach", "lead generation", "discovery", "use case",
-             "demo", "tender", "procurement", "dashboards", "ariba", "solutions architecture",
-             "architecture", "partner", "partners", "sales cycle", "deal",
-             "nvidia ai infrastructure", "ai infrastructure", "ai operations", "nvidia"]
+  Domains I know commercially: data platforms and lakehouses, data lakes and data
+  spaces, data virtualisation and migration, GenAI and agentic systems, RAG,
+  data and AI governance, EU AI Act compliance, GPU compute and AI
+  infrastructure, data centre engineering services, IoT hardware and SaaS.
 
-location_prefs:
-  # Prioridades de país (NL núcleo, CH/SG, EU/Remote, mercados del listado, origen)
-  weight: 20
+  Vendor ecosystem: Databricks, Snowflake, Denodo, Microsoft, IBM, NVIDIA,
+  Dell, HPE, Fujitsu.
+
+  Buyers: CTOs, CIOs, IT directors, engineering leads, heads of data,
+  public-sector procurement bodies. Markets: Spain, Latin America,
+  Saudi Arabia. Public sector is a genuine specialism.
+
+  Languages: Spanish native, English C1, French B1, German A2, basic Arabic.
+  EU citizen. No visa needed in the EU.
+
+# ---------------------------------------------------------------------------
+# 2. ANTI-IDENTITY — lo que NO soy (hard reject)
+# ---------------------------------------------------------------------------
+anti_identity:
+  # Roles que NO son match aunque el dominio encaje
+  reject_title_patterns:
+    - "machine learning engineer"
+    - "ml engineer"
+    - "mlops"
+    - "platform engineer"
+    - "data engineer"
+    - "analytics engineer"
+    - "data scientist"
+    - "software engineer"
+    - "devops"
+    - "sre"
+    - "site reliability"
+    - "cloud engineer"
+    - "security engineer"
+    - "solutions architect"
+    - "ai architect"
+    - "implementation consultant"
+    - "technical support"
+    - "product manager"
+    - "product marketing"
+    - "data analyst"
+    - "research scientist"
+    - "research engineer"
+    - "applied scientist"
+    # Entry-level sales — por debajo de mi nivel
+    - "sdr"
+    - "bdr"
+    - "inside sales"
+    - "lead generation"
+    - "sales development"
+
+# ---------------------------------------------------------------------------
+# 3. ROLE TAXONOMY — pesos por tier
+# ---------------------------------------------------------------------------
+role_taxonomy:
+  tier_a:
+    weight: 1.0
+    label: "Target directo"
+    titles:
+      - "account executive"
+      - "enterprise account executive"
+      - "strategic account executive"
+      - "business development manager"
+      - "business development director"
+      - "solutions consultant"
+      - "business value consultant"
+      - "value engineer"
+      - "sales engineer"
+      - "solutions engineer"
+      - "pre-sales consultant"
+      - "presales consultant"
+      - "technical account manager"
+      - "enterprise sales manager"
+      - "bid manager"
+      - "proposal manager"
+      - "capture manager"
+      - "partner manager"
+      - "alliances manager"
+      - "channel manager"
+      - "public sector account manager"
+      - "government account executive"
+      - "account manager"
+      - "key account manager"
+      - "kam"
+  tier_b:
+    weight: 0.6
+    label: "Encaje parcial"
+    titles:
+      - "commercial finance manager"
+      - "commercial manager"
+      - "deal desk"
+      - "customer success manager"
+      - "sales operations"
+      - "revenue operations"
+      - "go-to-market"
+      - "gtm manager"
+      - "market development manager"
+  tier_c:
+    weight: 0.4
+    label: "Solo data centre / AI infra"
+    titles:
+      - "development manager"
+      - "origination manager"
+      - "investment analyst"
+      - "commercial analyst"
+
+# ---------------------------------------------------------------------------
+# 4. HARD REJECT — descualificadores duros
+# ---------------------------------------------------------------------------
+hard_reject:
+  # Idiomas que si se piden → descarte (excepto los que hablo)
+  languages_forbidden:
+    - "dutch"
+    - "flemish"
+    - "danish"
+    - "norwegian"
+    - "swedish"
+    - "finnish"
+    - "italian"
+    - "portuguese"
+    - "mandarin"
+    - "cantonese"
+    - "japanese"
+    - "korean"
+    - "thai"
+    - "indonesian"
+    - "malay"
+    - "vietnamese"
+    - "turkish"
+    - "polish"
+    - "czech"
+    - "hungarian"
+    - "greek"
+    - "russian"
+    - "hindi"
+    - "tamil"
+  # Idiomas que hablo (para check de lang_req)
+  languages_spoken:
+    - "english"
+    - "spanish"
+    - "french"
+  # Experiencia máxima aceptable (años)
+  max_years_experience: 6
+  # Ubicaciones que NO acepto (restricción explícita en la oferta)
+  restricted_locations:
+    - "us only"
+    - "united states only"
+    - "canada only"
+    - "latam only"
+    - "india only"
+    - "usa only"
+  # Certificaciones que si se piden como mandatory → descarte
+  forbidden_certs:
+    - "aws solutions architect professional"
+    - "aws sa pro"
+    - "cka"
+    - "cissp"
+    - "compTIA"
+  # Patrones que indican hands-on production ownership
+  production_patterns:
+    - "on-call"
+    - "on call"
+    - "sla"
+    - "incident response"
+    - "code review"
+    - "pull request"
+    - "ci/cd"
+    - "kubernetes"
+    - "terraform"
+    - "ansible"
+  # Red establecida en mercado nacional específico (si se menciona)
+  established_network_patterns:
+    - "well-connected in"
+    - "established network in"
+    - "strong network in"
+    - "deep connections in"
+    - "existing relationships in"
+
+# ---------------------------------------------------------------------------
+# 5. GEOGRAFÍA — pesos por ubicación
+# ---------------------------------------------------------------------------
+geography:
+  weight: 30  # peso total de la geo en el score
   scoring:
-    netherlands: 18
-    amsterdam: 18
-    nederland: 18
-    utrecht: 13
-    rotterdam: 10
-    eindhoven: 10
-    hague: 10
-    switzerland: 18
-    zurich: 18
-    zürich: 18
-    geneva: 13
-    lausanne: 13
-    basel: 10
-    singapore: 12
-    "remote - emea": 16
-    remote: 16
-    emea: 6
-    europe: 6
-    norway: 9
-    oslo: 9
-    denmark: 9
-    copenhagen: 9
-    aarhus: 7
-    austria: 7
-    vienna: 7
-    wien: 7
-    spain: 7
-    madrid: 10
-    barcelona: 8
-    germany: 7
-    berlin: 7
-    france: 7
-    paris: 7
-    belgium: 7
-    brussels: 7
-    malaysia: 5
-    mexico: 4
-    thailand: 4
-    japan: 3
-    korea: 3
+    # Tier 1.00 — mercados objetivo
+    "united arab emirates": 1.0
+    "uae": 1.0
+    "abu dhabi": 1.0
+    "dubai": 1.0
+    "netherlands": 1.0
+    "amsterdam": 1.0
+    "utrecht": 1.0
+    "rotterdam": 1.0
+    "eindhoven": 1.0
+    "the hague": 1.0
+    # Tier 0.90
+    "ireland": 0.9
+    "dublin": 0.9
+    # Tier 0.85
+    "united kingdom": 0.85
+    "uk": 0.85
+    "london": 0.85
+    "england": 0.85
+    # Tier 0.80
+    "germany": 0.8
+    "munich": 0.8
+    "berlin": 0.8
+    "frankfurt": 0.8
+    "mexico": 0.8
+    "mexico city": 0.8
+    "cdmx": 0.8
+    "guadalajara": 0.8
+    "monterrey": 0.8
+    # Tier 0.70
+    "switzerland": 0.7
+    "zurich": 0.7
+    "zug": 0.7
+    "basel": 0.7
+    "geneva": 0.7
+    # Tier 0.65
+    "sweden": 0.65
+    "stockholm": 0.65
+    # Tier 0.60
+    "singapore": 0.6
+    # Tier 0.55
+    "saudi arabia": 0.55
+    "saudi": 0.55
+    "qatar": 0.55
+    "riyadh": 0.55
+    # Tier 0.40
+    "malaysia": 0.4
+    "denmark": 0.4
+    "norway": 0.4
+    "poland": 0.4
+    "portugal": 0.4
+    "copenhagen": 0.4
+    "oslo": 0.4
+    "warsaw": 0.4
+    # Tier 0.30
+    "remote - emea": 0.3
+    "remote": 0.3
+    "emea": 0.3
+    "europe": 0.3
+    # Tier 0.00 — no interesado
+    "spain": 0.0
+    "madrid": 0.0
+    "barcelona": 0.0
+    "us only": 0.0
+    "united states": 0.0
+    "usa": 0.0
 
+# ---------------------------------------------------------------------------
+# 6. DOMINIO — keywords que modulan el score (0.5 + 0.5 × overlap)
+# ---------------------------------------------------------------------------
+domain_keywords:
+  weight: 1  # multiplicador interno, el score usa 0.5 + 0.5 × overlap
+  keywords:
+    - ["ai sales", "data sales", "ai infrastructure", "data platform", "genai", "generative ai",
+       "rag", "ai agents", "agentic", "llm", "machine learning", "ai factory", "ai factories"]
+    - ["databricks", "snowflake", "denodo", "nvidia", "dell", "hpe", "fujitsu", "microsoft",
+       "ibm", "data lake", "data lakehouse", "data space", "data virtualisation",
+       "data virtualization", "data migration"]
+    - ["data center", "datacenter", "data centre", "gpu compute", "hpc", "compute",
+       "ai infrastructure", "ai operations", "semiconductor", "energy", "power",
+       "colocation", "hyperscale"]
+    - ["cloud", "saas", "paas", "iaas", "aws", "azure", "gcp", "kubernetes"]
+    - ["iot", "smart city", "smart cities", "connectivity", "telecom"]
+    - ["public sector", "government", "public administration", "procurement",
+       "public procurement", "tender", "tenders", "citizen", "eu ai act",
+       "data governance", "data lineage", "ai governance"]
+    - ["european commission", "european union", "eu institutions", "trade policy",
+       "economics", "economy", "single market", "commercial diplomacy"]
+    - ["openai", "anthropic", "gemini", "gpt", "copilot", "chatbot",
+       "virtual assistant", "automation", "rpa"]
+
+# ---------------------------------------------------------------------------
+# 7. SKILLS — competencias del CV que suman si aparecen
+# ---------------------------------------------------------------------------
+skills_keywords:
+  weight: 1
+  keywords:
+    - ["salesforce", "power bi", "sql", "rfp", "rfi", "proof of concept", "poc",
+       "presales", "pre-sales", "pipeline", "kpi", "stakeholder", "consultative",
+       "negotiation", "contract", "business case", "go-to-market", "gtm",
+       "demo", "tender", "procurement", "solutions architecture",
+       "sales cycle", "deal", "nvidia", "cfa", "mba", "denodo", "stratio",
+       "mlops", "data governance", "eu ai act", "reference architecture",
+       "semiconductor", "energy"]
+
+# ---------------------------------------------------------------------------
+# 8. SENIORITY
+# ---------------------------------------------------------------------------
 seniority:
-  # Ajuste por seniority
-  weight: 10
-  bonus: ["senior", "lead", "manager", "principal", "head", "director", "staff"]
-  penalty: ["intern", "internship", "graduate", "working student", "junior", "trainee", "practice"]
+  # seniority_fit: 1.0 mid/senior IC, 0.3 director+, 0.0 junior
+  bonus: ["senior", "lead", "manager", "principal", "head"]
+  penalty: ["intern", "internship", "graduate", "working student", "junior",
+            "trainee", "practice", "director", "vp", "vice president"]
+  director_penalty: 0.3  # score × 0.3 si es director/VP
+  junior_penalty: 0.0    # score × 0.0 si es junior/intern
 
+# ---------------------------------------------------------------------------
+# 9. SALARIO
+# ---------------------------------------------------------------------------
 salary_floor:
-  # Filtro soft: el matcher no descarta, solo informa en el summary
   eur_min: 70000
   note: "sueldo mínimo objetivo 70-80k EUR"
 
+# ---------------------------------------------------------------------------
+# 10. QUERIES — palabras para scraping
+# ---------------------------------------------------------------------------
 query_keywords:
-  # Palabras que se pasan a los portales nacionales (queries de búsqueda)
-  - "solutions engineer"
+  - "account executive"
+  - "enterprise account executive"
+  - "strategic account executive"
+  - "business development manager"
+  - "solutions consultant"
   - "sales engineer"
+  - "solutions engineer"
   - "presales"
   - "pre-sales"
-  - "business development manager"
-  - "business development"
-  - "product engineer"
-  - "product manager"
-  - "AI sales"
+  - "technical account manager"
+  - "key account manager"
+  - "partner manager"
+  - "alliances manager"
+  - "public sector account"
+  - "government account executive"
+  - "bid manager"
+  - "proposal manager"
+  - "ai sales"
   - "data sales"
-  - "data engineer"
-  - "data scientist"
-  - "artificial intelligence"
-  - "machine learning"
-  - "account executive"
-  - "account manager"
-  - "key account"
-  - "cloud sales"
-  - "SaaS"
   - "data center"
-  - "GPU"
-  - "HPC"
+  - "gpu"
+  - "nvidia"
+  - "databricks"
+  - "snowflake"
   - "public sector"
-  - "solutions consultant"
+  - "economist"
+  - "trade advisor"
+  - "trade policy"
+  - "policy analyst"
+  - "research analyst"
+  - "european commission"

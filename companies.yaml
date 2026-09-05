@@ -54,7 +54,7 @@ greenhouse:
   samsara: Samsara
   reddit: Reddit
   robinhood: Robinhood
-  # Tu listado: AI cloud / infra IA / fintech
+  # AI cloud / infra IA / fintech
   nebius: Nebius
   adyen: Adyen
   cognite: Cognite
@@ -65,6 +65,16 @@ greenhouse:
   anthropic: Anthropic
   scaleai: Scale AI
   rubrik: Rubrik
+  # Fintech / European unicorns
+  workatbackbase: Backbase
+  # Data platforms / enterprise B2B
+  salesloft: SalesLoft
+  workato: Workato
+  starburst: Starburst
+  singlestore: SingleStore
+  c3iot: C3.ai
+  contentstack: Contentstack
+  planetscale: PlanetScale
 
 ashby:
   # IA generativa y LLMs
@@ -95,6 +105,18 @@ ashby:
   # Cloud security / IA frontier
   notion: Notion
   wiz: Wiz
+  # European fintech / scale-ups
+  Mollie: Mollie
+  # Data platforms / AI infra
+  openai: OpenAI
+  anyscale: Anyscale
+  pinecone: Pinecone
+  cerebras: Cerebras
+  reka: Reka AI
+  baseten: Baseten
+  AlephAlpha: Aleph Alpha
+  lightning: Lightning AI
+  prefect: Prefect
 
 workday:
   # Semis / hardware / equipos
@@ -121,6 +143,8 @@ workday:
   # Manufactura electrónica
   jabil/wd5/Jabil_Careers: Jabil
   flextronics/wd1/Careers: Flex
+  # Grandes tech (Workday público)
+  salesforce/wd12/External_Career_Site: Salesforce
 
 smartrecruiters:
   # Semis / energía / superapp
@@ -131,3 +155,10 @@ smartrecruiters:
   Grab: Grab
   Kioxia: Kioxia
   DeltaElectronics: Delta Electronics
+  # European tech / fintech
+  Spotify: Spotify
+  Wise: Wise
+  TomTom: TomTom
+
+lever:
+  palantir: Palantir

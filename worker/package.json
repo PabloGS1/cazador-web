@@ -1,0 +1,21 @@
+{
+  "name": "cazador-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create cazador",
+    "db:local": "wrangler d1 execute cazador --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute cazador --remote --file=./schema.sql",
+    "seed:gen": "python make_seed_chunks.py && python make_default_profile.py",
+    "seed:local": "Get-ChildItem -Path seed/chunk-*.sql | Sort-Object Name | ForEach-Object { wrangler d1 execute cazador --local --file $_.FullName }",
+    "seed:remote": "Get-ChildItem -Path seed/chunk-*.sql | Sort-Object Name | ForEach-Object { wrangler d1 execute cazador --remote --file $_.FullName }"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260816.1",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.123.0"
+  }
+}

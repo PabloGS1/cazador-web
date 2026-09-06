@@ -857,13 +857,17 @@ def fetch_jobindex_rss(delay):
 
 def fetch_wttj(delay, secrets):
     jobs = []
-    algolia_key = secrets.get("wttj_algolia_key") or ""
+    algolia_key = secrets.get("wttj_algolia_key") or os.environ.get("WTTJ_ALGOLIA_KEY") or ""
     if not algolia_key:
         log("WTTJ: sin Algolia key, skip (añade wttj_algolia_key en secrets.yaml)")
         return jobs
     headers = dict(HEADERS)
     headers["x-algolia-application-id"] = WTTJ_APP_ID
     headers["x-algolia-api-key"] = algolia_key
+    headers["Content-Type"] = "application/x-www-form-urlencoded"
+    headers["Accept"] = "*/*"
+    headers["Origin"] = "https://www.welcometothejungle.com"
+    headers["Referer"] = "https://www.welcometothejungle.com/fr/jobs"
     for q in WTTJ_QUERIES:
         body = {
             "requests": [{
